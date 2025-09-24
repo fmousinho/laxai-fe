@@ -39,7 +39,8 @@ export default function LoginPage() {
             </a>
           </Button>
 
-          {/* Apple Login */}
+          {/*
+          Apple Login
           <Button 
             variant="outline" 
             className="w-full h-12 text-sm font-medium"
@@ -55,6 +56,7 @@ export default function LoginPage() {
               Continue with Apple
             </a>
           </Button>
+          */}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
