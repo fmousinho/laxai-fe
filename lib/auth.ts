@@ -1,6 +1,3 @@
-import NextAuth from 'next-auth';
-import GitHub from 'next-auth/providers/github';
+import { getAccessToken, withPageAuthRequired } from '@auth0/nextjs-auth0';
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [GitHub]
-});
+export { getAccessToken, withPageAuthRequired };

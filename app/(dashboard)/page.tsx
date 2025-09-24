@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+import { auth0 } from "@/lib/auth0";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { File, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +11,14 @@ export default async function ProductsPage(
     searchParams: Promise<{ q: string; offset: string }>;
   }
 ) {
+  // Check authentication
+  const session = await auth0.getSession();
+  
+  if (!session) {
+    // User not authenticated, redirect to login
+    redirect('/login');
+  }
+
   const searchParams = await props.searchParams;
   const search = searchParams.q ?? '';
   const offset = searchParams.offset ?? 0;

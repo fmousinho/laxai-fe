@@ -1,5 +1,8 @@
+
+'use client';
+import { useUser } from '@auth0/nextjs-auth0';
 import { Button } from '@/components/ui/button';
-import { auth, signOut } from '@/lib/auth';
+
 import Image from 'next/image';
 import {
   DropdownMenu,
@@ -11,9 +14,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 
-export async function User() {
-  let session = await auth();
-  let user = session?.user;
+
+export default function User() {
+  const { user, isLoading } = useUser();
+
+  if (isLoading) {
+    return null; // Or a loading spinner
+  }
 
   return (
     <DropdownMenu>
@@ -40,18 +47,11 @@ export async function User() {
         <DropdownMenuSeparator />
         {user ? (
           <DropdownMenuItem>
-            <form
-              action={async () => {
-                'use server';
-                await signOut();
-              }}
-            >
-              <button type="submit">Sign Out</button>
-            </form>
+            <Link href="/api/auth/logout">Sign Out</Link>
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem>
-            <Link href="/login">Sign In</Link>
+            <Link href="/api/auth/login">Sign In</Link>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

@@ -1,3 +1,4 @@
+"use client";
 import Link from 'next/link';
 import {
   Home,
@@ -27,7 +28,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip';
 import { Analytics } from '@vercel/analytics/react';
-import { User } from './user';
+import User from './user';
 import { VercelLogo } from '@/components/icons';
 import Providers from './providers';
 import { NavItem } from './nav-item';
@@ -91,7 +92,7 @@ function DesktopNav() {
           <LineChart className="h-5 w-5" />
         </NavItem>
 
-         <NavItem href="#" label="Uploads">
+         <NavItem href="/uploads" label="Uploads">
           <Upload className="h-5 w-5" />
         </NavItem>
       </nav>
@@ -158,6 +159,13 @@ function MobileNav() {
           >
             <Users2 className="h-5 w-5" />
             Customers
+          </Link>
+            <Link
+            href="#"
+            className="flex items-center gap-4 px-2.5 text-foreground"
+          >
+            <Package className="h-5 w-5" />
+            Uploads
           </Link>
           <Link
             href="#"
