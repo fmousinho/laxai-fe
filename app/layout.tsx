@@ -6,9 +6,9 @@ import { Analytics } from '@vercel/analytics/react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Next.js App Router + NextAuth + Tailwind CSS',
+  title: 'LaxAI',
   description:
-    'A user admin dashboard configured with Next.js, Postgres, NextAuth, Tailwind CSS, TypeScript, and Prettier.'
+    'AI-Powered Lacrosse performance analysis platform',
 };
 
 export default function RootLayout({
