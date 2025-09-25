@@ -9,7 +9,8 @@ import {
   Settings,
   ShoppingCart,
   Upload,
-  Users2
+  Users2,
+  Combine
 } from 'lucide-react';
 
 import {
@@ -90,6 +91,10 @@ function DesktopNav() {
 
         <NavItem href="#" label="Analytics">
           <LineChart className="h-5 w-5" />
+        </NavItem>
+
+        <NavItem href="#" label="Data Prep">
+          <Combine className="h-5 w-5" />
         </NavItem>
 
          <NavItem href="/uploads" label="Uploads">
