@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Storage } from '@google-cloud/storage';
 import { auth0 } from '@/lib/auth0';
+import jwt from 'jsonwebtoken';
 
 // Initialize GCS client. It securely uses environment variables (see setup notes).
 const storage = new Storage();
@@ -9,15 +10,32 @@ const bucketName = process.env.GCS_BUCKET_NAME as string;
 export async function POST(req: NextRequest) {
   try {
     // Get Auth0 session (user must be authenticated)
-    const session = await auth0.getSession();
+    const session = await auth0.getSession(req);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    
+    // Decode the ID token to extract tenant_id from custom claim
+    const idToken = session.tokenSet.idToken;
+    let tenantId;
+    
+    const NAMESPACE = 'https://myapp.com';
+    if (typeof idToken === 'string') {
+      const decoded = jwt.decode(idToken);
+      tenantId = decoded && (decoded as Record<string, any>)[`${NAMESPACE}/tenant_id`];
+    }
 
-    // Get tenant_id from user app_metadata
-    const tenantId = session.user.app_metadata?.tenant_id;
     if (!tenantId) {
-      return NextResponse.json({ error: 'No tenant_id found in user metadata' }, { status: 403 });
+      return NextResponse.json({ 
+        error: 'No tenant_id found in ID token',
+        debug: {
+          hasIdToken: !!idToken,
+          idTokenDecoded: typeof idToken === 'string' ? jwt.decode(idToken) : null,
+          userKeys: Object.keys(session.user),
+          hasAppMetadata: !!session.user.app_metadata,
+          appMetadata: session.user.app_metadata
+        }
+      }, { status: 403 });
     }
 
     const { fileName, contentType } = await req.json();
@@ -25,8 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing fileName or contentType' }, { status: 400 });
     }
 
-    // Enforce path: laxai_dev/{tenant_id}/raw/{fileName}
-    const objectPath = `laxai_dev/${tenantId}/raw/${fileName}`;
+    // Enforce path: {tenant_id}/raw/{fileName}
+    const objectPath = `${tenantId}/raw/${fileName}`;
     const bucket = storage.bucket(bucketName);
     const file = bucket.file(objectPath);
     const expirationTime = Date.now() + 1 * 60 * 1000; // URL expires in 1 minute
