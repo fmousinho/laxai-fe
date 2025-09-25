@@ -108,11 +108,12 @@ export function Logo() {
   );
 }
 
-export function VercelLogo(props: React.SVGProps<SVGSVGElement>) {
+
+export function LaxAILogo(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}
-      aria-label="Vercel logomark"
+      aria-label="LaxAI logomark"
       height="64"
       role="img"
       viewBox="0 0 74 64"
@@ -124,3 +125,5 @@ export function VercelLogo(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+
