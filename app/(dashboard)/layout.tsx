@@ -93,7 +93,7 @@ function DesktopNav() {
           <LineChart className="h-5 w-5" />
         </NavItem>
 
-        <NavItem href="#" label="Data Prep">
+        <NavItem href="/dataprep" label="Data Prep">
           <Combine className="h-5 w-5" />
         </NavItem>
 
