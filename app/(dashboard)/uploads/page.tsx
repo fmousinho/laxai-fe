@@ -49,9 +49,24 @@ export default function Uploads() {
       .finally(() => setLoading(false));
   };
 
-  const handleDelete = () => {
-    // TODO: Implement delete from GCS via API
-    setVideoFile(null);
+  const handleDelete = async () => {
+    if (!videoFile) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await axios.delete('/api/gcs/delete_video', { data: { fileName: videoFile } });
+      // After delete, refresh video list
+      const { data } = await axios.get('/api/gcs/list_video');
+      if (data.files && data.files.length > 0) {
+        setVideoFile(data.files[0]);
+      } else {
+        setVideoFile(null);
+      }
+    } catch (err) {
+      setError('Failed to delete video');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const bucket = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME;
