@@ -84,7 +84,7 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
   const uploadFile = async (file: File) => {
     setUploading(true);
     try {
-      const { data } = await axios.post('/api/gcs-upload', {
+      const { data } = await axios.post('/api/gcs/upload_video', {
         fileName: file.name,
         contentType: file.type,
       });
