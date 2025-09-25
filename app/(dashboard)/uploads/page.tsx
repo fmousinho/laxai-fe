@@ -7,6 +7,7 @@ import { useDropzone } from "react-dropzone";
 
 
 export default function Uploads() {
+  const [showModal, setShowModal] = useState(false);
   const [videoFile, setVideoFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +84,33 @@ export default function Uploads() {
       ) : (
         <div className="mt-6 text-center flex flex-col items-center gap-4">
           <p className="mb-2 text-lg font-medium">Video uploaded!</p>
-          <video src={videoUrl} controls className="mx-auto max-h-64 rounded-lg border bg-black" style={{ maxWidth: 400 }} />
+          <video
+            src={videoUrl}
+            controls
+            className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+            style={{ maxWidth: 400 }}
+            onClick={() => setShowModal(true)}
+          />
+          {showModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
+              <div className="relative" onClick={e => e.stopPropagation()}>
+                <video
+                  src={videoUrl}
+                  controls
+                  autoPlay
+                  className="rounded-lg border bg-black shadow-2xl"
+                  style={{ maxWidth: '90vw', maxHeight: '80vh' }}
+                />
+                <button
+                  className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
+                  onClick={() => setShowModal(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
           <div className="text-sm text-muted-foreground">{videoFile}</div>
           <div className="flex gap-4 mt-2">
             <button
@@ -91,12 +118,6 @@ export default function Uploads() {
               onClick={handleDelete}
             >
               Delete
-            </button>
-            <button
-              className="px-4 py-2 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition"
-              onClick={handleDelete}
-            >
-              Replace
             </button>
           </div>
         </div>
