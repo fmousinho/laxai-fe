@@ -1,57 +1,75 @@
 
 "use client";
 import React, { useCallback, useState, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
 import axios from "axios";
+import { useDropzone } from "react-dropzone";
 
 
-type UploaderProps = {
-  onUploadCompleteAction: (url: string) => void;
-};
 
 export default function Uploads() {
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // On mount, load from localStorage if present
+  // On mount, fetch from API
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const url = localStorage.getItem('uploadedVideoUrl');
-      const name = localStorage.getItem('uploadedVideoFileName');
-      if (url && name) {
-        setUploadedUrl(url);
-        setUploadedFileName(name);
+    const fetchVideo = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data } = await axios.get('/api/gcs/list_video');
+        if (data.files && data.files.length > 0) {
+          setVideoFile(data.files[0]);
+        } else {
+          setVideoFile(null);
+        }
+      } catch (err) {
+        setError('Failed to load video info');
+        setVideoFile(null);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    fetchVideo();
   }, []);
 
   const handleUploadComplete = (url: string, fileName: string) => {
-    setUploadedUrl(url);
-    setUploadedFileName(fileName);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('uploadedVideoUrl', url);
-      localStorage.setItem('uploadedVideoFileName', fileName);
-    }
+    // After upload, refetch video list
+    setLoading(true);
+    setError(null);
+    axios.get('/api/gcs/list_video')
+      .then(({ data }) => {
+        if (data.files && data.files.length > 0) {
+          setVideoFile(data.files[0]);
+        } else {
+          setVideoFile(null);
+        }
+      })
+      .catch(() => setError('Failed to load video info'))
+      .finally(() => setLoading(false));
   };
 
   const handleDelete = () => {
-    setUploadedUrl(null);
-    setUploadedFileName(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('uploadedVideoUrl');
-      localStorage.removeItem('uploadedVideoFileName');
-    }
+    // TODO: Implement delete from GCS via API
+    setVideoFile(null);
   };
+
+  const bucket = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME;
+  const videoUrl = videoFile ? `https://storage.googleapis.com/${bucket}/raw/${videoFile}` : null;
 
   return (
     <div className="py-8">
-      {!uploadedUrl ? (
+      {loading ? (
+        <div className="text-center text-muted-foreground">Loading...</div>
+      ) : error ? (
+        <div className="text-center text-red-500">{error}</div>
+      ) : !videoUrl ? (
         <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
       ) : (
         <div className="mt-6 text-center flex flex-col items-center gap-4">
           <p className="mb-2 text-lg font-medium">Video uploaded!</p>
-          <video src={uploadedUrl} controls className="mx-auto max-h-64 rounded-lg border bg-black" style={{ maxWidth: 400 }} />
-          <div className="text-sm text-muted-foreground">{uploadedFileName}</div>
+          <video src={videoUrl} controls className="mx-auto max-h-64 rounded-lg border bg-black" style={{ maxWidth: 400 }} />
+          <div className="text-sm text-muted-foreground">{videoFile}</div>
           <div className="flex gap-4 mt-2">
             <button
               className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
@@ -70,6 +88,7 @@ export default function Uploads() {
       )}
     </div>
   );
+
 }
 
 type VideoUploaderProps = {
