@@ -1,13 +1,39 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
 
 type ImagePair = {
 	imagesA: string[];
 	imagesB: string[];
 };
 
+type VideoFile = {
+  fileName: string;
+  signedUrl: string;
+};
+
 export default function DataPrepPage() {
+	const [view, setView] = useState<'list' | 'prep'>('list');
+	const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
+	const [videos, setVideos] = useState<VideoFile[]>([]);
+	const [loadingVideos, setLoadingVideos] = useState(true);
 	const [started, setStarted] = useState(false);
 	const [imagePair, setImagePair] = useState<ImagePair | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -17,9 +43,26 @@ export default function DataPrepPage() {
 	const listARef = useRef<HTMLDivElement>(null);
 	const listBRef = useRef<HTMLDivElement>(null);
 
+	// Fetch videos on mount
+	useEffect(() => {
+		const fetchVideos = async () => {
+			setLoadingVideos(true);
+			try {
+				const { data } = await axios.get('/api/gcs/list_video');
+				setVideos(data.files || []);
+			} catch (err) {
+				console.error('Failed to load videos:', err);
+				setVideos([]);
+			} finally {
+				setLoadingVideos(false);
+			}
+		};
+		fetchVideos();
+	}, []);
+
 	const fetchPair = async () => {
 		setLoading(true);
-		// TODO: Replace with real API call
+		// TODO: Replace with real API call that includes selected video
 		const res = await fetch("/api/dataprep/track_pair_for_verification");
 		const data = await res.json();
 		setImagePair(data);
@@ -30,6 +73,24 @@ export default function DataPrepPage() {
 		setStarted(true);
 		setSuspended(false);
 		await fetchPair();
+	};
+
+	const handlePrepareVideo = async (video: VideoFile) => {
+		setSelectedVideo(video);
+		setView('prep');
+		setStarted(false);
+		setSuspended(false);
+		setImagePair(null);
+		// Automatically start the comparison
+		await handleStart();
+	};
+
+	const handleBackToList = () => {
+		setView('list');
+		setSelectedVideo(null);
+		setStarted(false);
+		setSuspended(false);
+		setImagePair(null);
 	};
 
 	const handleClassify = async (label: "same" | "different") => {
@@ -81,56 +142,126 @@ export default function DataPrepPage() {
 	}
 
 	return (
-		<div className="flex flex-col items-center justify-center min-h-[70vh] w-full px-0 sm:px-4 max-w-screen-lg mx-auto">
-			{!started && !loading && (
-				<button
-					className="px-8 py-4 rounded-full bg-indigo-600 text-white text-xl font-semibold shadow hover:bg-indigo-700 transition"
-					onClick={handleStart}
-				>
-					Start Comparing
-				</button>
-			)}
-
-			{started && imagePair && (
-				<>
-					<h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
-					<ImageRow images={imagePair.imagesA} refEl={listARef} />
-					<ImageRow images={imagePair.imagesB} refEl={listBRef} />
-
-					<div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
-						<button
-							className="w-full px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-50"
-							onClick={() => handleClassify("same")}
-							disabled={loading}
+		<div className="w-full max-w-6xl mx-auto p-4">
+			{view === 'list' ? (
+				// Video List View
+				<Card>
+					<CardHeader>
+						<CardTitle>Data Preparation</CardTitle>
+						<CardDescription>
+							Select a video to prepare for data classification tasks.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						{loadingVideos ? (
+							<div className="text-center py-8">Loading videos...</div>
+						) : videos.length === 0 ? (
+							<div className="text-center py-8 text-muted-foreground">
+								No videos available. Please upload some videos first.
+							</div>
+						) : (
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-[100px]">Thumbnail</TableHead>
+										<TableHead>Video Name</TableHead>
+										<TableHead className="w-[120px]">Actions</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{videos.map((video, index) => (
+										<TableRow key={index}>
+											<TableCell>
+												<video
+													src={video.signedUrl}
+													className="w-16 h-12 object-cover rounded"
+													muted
+												/>
+											</TableCell>
+											<TableCell className="font-medium">
+												{video.fileName}
+											</TableCell>
+											<TableCell>
+												<Button
+													onClick={() => handlePrepareVideo(video)}
+													size="sm"
+												>
+													Prepare
+												</Button>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						)}
+					</CardContent>
+				</Card>
+			) : (
+				// Data Prep View
+				<div className="flex flex-col items-center justify-center min-h-[70vh] w-full px-0 sm:px-4 max-w-screen-lg mx-auto">
+					<div className="w-full flex justify-between items-center mb-6">
+						<Button
+							variant="outline"
+							onClick={handleBackToList}
 						>
-							Same
-						</button>
-						<button
-							className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
-							onClick={() => handleClassify("different")}
-							disabled={loading}
-						>
-							Different
-						</button>
-						<button
-							className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
-							onClick={() => {/* TODO: implement skip behavior */}}
-							disabled={loading}
-						>
-							Skip
-						</button>
+							← Back to Videos
+						</Button>
+						<div className="text-sm text-muted-foreground">
+							Preparing: {selectedVideo?.fileName}
+						</div>
 					</div>
 
-					<div className="mt-10">
+					{!started && !loading && (
 						<button
-							className="px-6 py-2 rounded-full bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
-							onClick={handleSuspend}
-							disabled={loading}
+							className="px-8 py-4 rounded-full bg-indigo-600 text-white text-xl font-semibold shadow hover:bg-indigo-700 transition"
+							onClick={handleStart}
 						>
-							Suspend Classification
+							Start Comparing
 						</button>
-					</div>
-				</>
+					)}
+
+					{started && imagePair && (
+						<>
+							<h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
+							<ImageRow images={imagePair.imagesA} refEl={listARef} />
+							<ImageRow images={imagePair.imagesB} refEl={listBRef} />
+
+							<div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
+								<button
+									className="w-full px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-50"
+									onClick={() => handleClassify("same")}
+									disabled={loading}
+								>
+									Same
+								</button>
+								<button
+									className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
+									onClick={() => handleClassify("different")}
+									disabled={loading}
+								>
+									Different
+								</button>
+								<button
+									className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
+									onClick={() => {/* TODO: implement skip behavior */}}
+									disabled={loading}
+								>
+									Skip
+								</button>
+							</div>
+
+							<div className="mt-10">
+								<button
+									className="px-6 py-2 rounded-full bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
+									onClick={handleSuspend}
+									disabled={loading}
+								>
+									Suspend Classification
+								</button>
+							</div>
+						</>
+					)}
+				</div>
 			)}
 		</div>
 	);
