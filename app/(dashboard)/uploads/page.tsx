@@ -134,10 +134,12 @@ type VideoUploaderProps = {
 function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Upload logic
   const uploadFile = async (file: File) => {
     setUploading(true);
+    setUploadProgress(0);
     try {
       const { data } = await axios.post('/api/gcs/upload_video', {
         fileName: file.name,
@@ -148,13 +150,21 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
         headers: {
           'Content-Type': file.type,
         },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percentCompleted);
+          }
+        },
       });
       setSelectedFileName(null);
+      setUploadProgress(0);
       // After upload, refetch video list and use signedUrl
       onUploadCompleteAction();
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Upload failed. Check console.');
+      setUploadProgress(0);
     } finally {
       setUploading(false);
     }
@@ -213,8 +223,19 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <p className="text-lg font-medium mb-2">
-          {isDragActive ? "Drop the files here ..." : uploading ? "Uploading..." : "Drag & drop a file here, or click to select"}
+          {isDragActive ? "Drop the files here ..." : uploading ? `Uploading... ${uploadProgress}%` : "Drag & drop a file here, or click to select"}
         </p>
+        {uploading && (
+          <div className="w-full mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{uploadProgress}% complete</p>
+          </div>
+        )}
         {selectedFileName && (
           <div className="mt-4 text-sm text-muted-foreground">Selected: {selectedFileName}</div>
         )}
