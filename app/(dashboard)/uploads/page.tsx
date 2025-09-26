@@ -8,7 +8,8 @@ import { useDropzone } from "react-dropzone";
 
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
-  const [videoFile, setVideoFile] = useState<string | null>(null);
+  // videoFile: { fileName, signedUrl } | null
+  const [videoFile, setVideoFile] = useState<{ fileName: string; signedUrl: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +35,7 @@ export default function Uploads() {
     fetchVideo();
   }, []);
 
-  const handleUploadComplete = (url: string, fileName: string) => {
+  const handleUploadComplete = () => {
     // After upload, refetch video list
     setLoading(true);
     setError(null);
@@ -55,7 +56,7 @@ export default function Uploads() {
     setLoading(true);
     setError(null);
     try {
-      await axios.delete('/api/gcs/delete_video', { data: { fileName: videoFile } });
+      await axios.delete('/api/gcs/delete_video', { data: { fileName: videoFile.fileName } });
       // After delete, refresh video list
       const { data } = await axios.get('/api/gcs/list_video');
       if (data.files && data.files.length > 0) {
@@ -70,8 +71,7 @@ export default function Uploads() {
     }
   };
 
-  const bucket = process.env.NEXT_PUBLIC_GCS_BUCKET_NAME;
-  const videoUrl = videoFile ? `https://storage.googleapis.com/${bucket}/raw/${videoFile}` : null;
+  const videoUrl = videoFile ? videoFile.signedUrl : null;
 
   return (
     <div className="py-8">
@@ -80,7 +80,7 @@ export default function Uploads() {
       ) : error ? (
         <div className="text-center text-red-500">{error}</div>
       ) : !videoUrl ? (
-        <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
+  <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
       ) : (
         <div className="mt-6 text-center flex flex-col items-center gap-4">
           <p className="mb-2 text-lg font-medium">Video uploaded!</p>
@@ -111,7 +111,7 @@ export default function Uploads() {
               </div>
             </div>
           )}
-          <div className="text-sm text-muted-foreground">{videoFile}</div>
+          <div className="text-sm text-muted-foreground">{videoFile?.fileName}</div>
           <div className="flex gap-4 mt-2">
             <button
               className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
@@ -128,7 +128,7 @@ export default function Uploads() {
 }
 
 type VideoUploaderProps = {
-  onUploadCompleteAction: (url: string, fileName: string) => void;
+  onUploadCompleteAction: () => void;
 };
 
 function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
@@ -143,15 +143,15 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
         fileName: file.name,
         contentType: file.type,
       });
-      const { signedUrl, objectName } = data;
+      const { signedUrl } = data;
       await axios.put(signedUrl, file, {
         headers: {
           'Content-Type': file.type,
         },
       });
-  setSelectedFileName(null);
-  const publicUrl = `https://storage.googleapis.com/${process.env.NEXT_PUBLIC_GCS_BUCKET_NAME}/${objectName}`;
-  onUploadCompleteAction(publicUrl, file.name);
+      setSelectedFileName(null);
+      // After upload, refetch video list and use signedUrl
+      onUploadCompleteAction();
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Upload failed. Check console.');

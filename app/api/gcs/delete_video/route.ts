@@ -10,7 +10,9 @@ export async function DELETE(req: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
   }
-  const { fileName } = await req.json();
+  // Accept either { fileName } or { fileName, signedUrl }
+  const body = await req.json();
+  const fileName = body.fileName || (body.file && body.file.fileName);
   if (!fileName) {
     return NextResponse.json({ error: 'Missing fileName' }, { status: 400 });
   }

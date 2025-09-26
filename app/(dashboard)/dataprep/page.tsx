@@ -51,18 +51,19 @@ export default function DataPrepPage() {
 		setImagePair(null);
 	};
 
-	// Helper to render a scrollable image row
-	function ImageRow({ images, refEl }: { images: string[]; refEl: React.RefObject<HTMLDivElement> }) {
+	// Helper to render a scrollable image row (fixed height, horizontal scroll only)
+	function ImageRow({ images, refEl }: { images: string[]; refEl: React.RefObject<HTMLDivElement | null> }) {
 		return (
 			<div
 				ref={refEl}
-				className="rounded-2xl bg-white shadow p-2 my-4 flex overflow-x-auto gap-2 min-h-[70px] w-full box-border"
+				className="rounded-2xl bg-white shadow p-3 my-4 flex gap-2 w-full box-border overflow-x-auto overflow-y-hidden"
 				style={{
 				  width: '100%',
 				  boxSizing: 'border-box',
-				  overflowX: 'auto',
-				  overflowY: 'hidden',
 				  flexShrink: 0,
+				  scrollbarWidth: 'thin',
+				  WebkitOverflowScrolling: 'touch',
+				  height: 90,
 				}}
 			>
 				{images.map((src, i) => (
@@ -71,8 +72,8 @@ export default function DataPrepPage() {
 						src={src}
 						alt="data"
 						loading="lazy"
-						className="h-[60px] max-w-[120px] object-contain rounded border"
-						style={{ minWidth: 40 }}
+						className="h-[70px] object-contain rounded border"
+						style={{ minWidth: 70, maxWidth: 140 }}
 					/>
 				))}
 			</div>
@@ -92,23 +93,31 @@ export default function DataPrepPage() {
 
 			{started && imagePair && (
 				<>
+					<h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
 					<ImageRow images={imagePair.imagesA} refEl={listARef} />
 					<ImageRow images={imagePair.imagesB} refEl={listBRef} />
 
-					<div className="flex gap-6 mt-4">
+					<div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
 						<button
-							className="flex-1 px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition"
+							className="w-full px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-50"
 							onClick={() => handleClassify("same")}
 							disabled={loading}
 						>
 							Same
 						</button>
 						<button
-							className="flex-1 px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition"
+							className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
 							onClick={() => handleClassify("different")}
 							disabled={loading}
 						>
 							Different
+						</button>
+						<button
+							className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
+							onClick={() => {/* TODO: implement skip behavior */}}
+							disabled={loading}
+						>
+							Skip
 						</button>
 					</div>
 

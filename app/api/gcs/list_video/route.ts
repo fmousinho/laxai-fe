@@ -22,11 +22,23 @@ export async function GET(req: NextRequest) {
   }
   try {
     const [files] = await storage.bucket(bucketName!).getFiles({ prefix });
+    // Only .mp4 files, not folders
     const mp4Files = files
-      .filter(f => f.name.endsWith('.mp4') && !f.name.endsWith('/'))
-      .map(f => f.name.replace(prefix, ''));
-  cachedMp4 = { files: mp4Files, ts: Date.now(), prefix };
-    return NextResponse.json({ files: mp4Files, cached: false });
+      .filter(f => f.name.endsWith('.mp4') && !f.name.endsWith('/'));
+    // Generate signed URLs for each file
+    const signedFiles = await Promise.all(mp4Files.map(async (f) => {
+      const [signedUrl] = await f.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 10 * 60 * 1000, // 10 min expiry
+      });
+      return {
+        fileName: f.name.replace(prefix, ''),
+        signedUrl,
+      };
+    }));
+    cachedMp4 = { files: signedFiles, ts: Date.now(), prefix };
+    return NextResponse.json({ files: signedFiles, cached: false });
   } catch (err) {
     console.error('GCS list error:', err);
     return NextResponse.json({ error: 'Failed to list files' }, { status: 500 });
