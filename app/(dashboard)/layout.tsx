@@ -34,6 +34,7 @@ import { LaxAILogo } from '@/components/icons';
 import Providers from './providers';
 import { NavItem } from './nav-item';
 import { SearchInput } from './search';
+import { usePathname } from 'next/navigation';
 
 export default function DashboardLayout({
   children
@@ -186,6 +187,19 @@ function MobileNav() {
 }
 
 function DashboardBreadcrumb() {
+  const pathname = usePathname();
+
+  const getPageName = (path: string) => {
+    const pageMap: Record<string, string> = {
+      '/': 'Dashboard',
+      '/dataprep': 'Data Prep',
+      '/uploads': 'Uploads',
+      '/customers': 'Customers',
+      // Add more as needed
+    };
+    return pageMap[path] || 'Page';
+  };
+
   return (
     <Breadcrumb className="hidden md:flex">
       <BreadcrumbList>
@@ -197,7 +211,7 @@ function DashboardBreadcrumb() {
         <BreadcrumbSeparator />
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link href="#">Products</Link>
+            <Link href={pathname}>{getPageName(pathname)}</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
       </BreadcrumbList>
