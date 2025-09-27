@@ -18,6 +18,8 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { ErrorPage } from '@/components/ErrorPage';
+import { useErrorHandler } from '@/lib/useErrorHandler';
 
 type ImagePair = {
 	imagesA: string[];
@@ -38,6 +40,8 @@ export default function DataPrepPage() {
 	const [imagePair, setImagePair] = useState<ImagePair | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [suspended, setSuspended] = useState(false);
+
+	const { error, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
 	// For lazy loading, track which images are in view (placeholder for now)
 	const listARef = useRef<HTMLDivElement>(null);
@@ -62,14 +66,26 @@ export default function DataPrepPage() {
 
 	const fetchPair = async () => {
 		setLoading(true);
+		clearError(); // Clear any previous errors
 		// TODO: Replace with real API call that includes selected video
 		const processFolder = selectedVideo?.fileName;
 		const url = processFolder
 			? `/api/dataprep/track_pair_for_verification?process_folder=${encodeURIComponent(processFolder)}`
 			: '/api/dataprep/track_pair_for_verification';
-		const res = await fetch(url);
-		const data = await res.json();
-		setImagePair(data);
+		try {
+			const res = await fetch(url);
+			const isOk = await handleFetchError(res, 'fetchPair');
+			if (!isOk) {
+				setLoading(false);
+				return;
+			}
+			const data = await res.json();
+			setImagePair(data);
+		} catch (error) {
+			console.error('Failed to fetch pair:', error);
+			// For network errors, use handleApiError
+			handleApiError(error, 'fetchPair');
+		}
 		setLoading(false);
 	};
 
@@ -85,6 +101,7 @@ export default function DataPrepPage() {
 		setStarted(false);
 		setSuspended(false);
 		setImagePair(null);
+		clearError(); // Clear any errors when starting new video
 		// Automatically start the comparison
 		await handleStart();
 	};
@@ -95,25 +112,52 @@ export default function DataPrepPage() {
 		setStarted(false);
 		setSuspended(false);
 		setImagePair(null);
+		clearError(); // Clear any errors when going back
 	};
 
 	const handleClassify = async (label: "same" | "different") => {
 		setLoading(true);
-		// TODO: Replace with real API call
-		const res = await fetch("/api/dataprep/classify_pair", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ label }),
-		});
-		const data = await res.json();
-		setImagePair(data);
+		clearError(); // Clear any previous errors
+		try {
+			const res = await fetch("/api/dataprep/classify_pair", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ label }),
+			});
+			const isOk = await handleFetchError(res, 'handleClassify');
+			if (!isOk) {
+				setLoading(false);
+				return;
+			}
+			const data = await res.json();
+			setImagePair(data);
+		} catch (error) {
+			console.error('Failed to classify pair:', error);
+			handleApiError(error, 'handleClassify');
+		}
 		setLoading(false);
 	};
 
-	const handleSuspend = () => {
-		setStarted(false);
-		setSuspended(true);
-		setImagePair(null);
+	const handleSuspend = async () => {
+		setLoading(true);
+		clearError(); // Clear any previous errors
+		try {
+			const res = await fetch("/api/dataprep/suspend", {
+				method: "POST",
+			});
+			const isOk = await handleFetchError(res, 'handleSuspend');
+			if (!isOk) {
+				setLoading(false);
+				return;
+			}
+			setStarted(false);
+			setSuspended(true);
+			setImagePair(null);
+		} catch (error) {
+			console.error('Failed to suspend:', error);
+			handleApiError(error, 'handleSuspend');
+		}
+		setLoading(false);
 	};
 
 	// Helper to render a scrollable image row (fixed height, horizontal scroll only)
@@ -147,7 +191,29 @@ export default function DataPrepPage() {
 
 	return (
 		<div className="w-full max-w-6xl mx-auto p-4">
-			{view === 'list' ? (
+			{error ? (
+				<ErrorPage
+					error={error}
+					onRetry={clearError}
+					onDismiss={() => handleBackToList()}
+					customActions={
+						<>
+							<Button
+								onClick={clearError}
+								variant="outline"
+							>
+								Try Again
+							</Button>
+							<Button
+								onClick={handleBackToList}
+								variant="default"
+							>
+								Back to Videos
+							</Button>
+						</>
+					}
+				/>
+			) : view === 'list' ? (
 				// Video List View
 				<Card>
 					<CardHeader>
