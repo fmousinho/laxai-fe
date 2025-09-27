@@ -36,20 +36,6 @@ export async function POST(req: NextRequest) {
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
-    // TEMPORARY: Return mock response for testing
-    const requestData = {
-      ...body,
-      tenant_id: tenantId
-    };
-    console.log('Would send to backend:', requestData);
-    return NextResponse.json({
-      task_id: `task_${Date.now()}`,
-      status: "queued",
-      message: "Tracking job queued successfully (mock)",
-      created_at: new Date().toISOString()
-    });
-
-    /* 
     // Make request to backend API
     const requestData = {
       ...body,
@@ -74,7 +60,6 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(response.data);
-    */
   } catch (error) {
     console.error('Error creating tracking job:', error);
     return NextResponse.json({ error: 'Failed to create tracking job' }, { status: 500 });
