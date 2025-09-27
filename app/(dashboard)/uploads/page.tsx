@@ -119,6 +119,15 @@ export default function Uploads() {
             >
               Delete
             </button>
+            <button
+              className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+              onClick={() => {
+                // TODO: Implement video analysis functionality
+                alert('Video analysis feature coming soon!');
+              }}
+            >
+              Start Video Analysis
+            </button>
           </div>
         </div>
       )}

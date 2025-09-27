@@ -63,7 +63,11 @@ export default function DataPrepPage() {
 	const fetchPair = async () => {
 		setLoading(true);
 		// TODO: Replace with real API call that includes selected video
-		const res = await fetch("/api/dataprep/track_pair_for_verification");
+		const processFolder = selectedVideo?.fileName;
+		const url = processFolder
+			? `/api/dataprep/track_pair_for_verification?process_folder=${encodeURIComponent(processFolder)}`
+			: '/api/dataprep/track_pair_for_verification';
+		const res = await fetch(url);
 		const data = await res.json();
 		setImagePair(data);
 		setLoading(false);
