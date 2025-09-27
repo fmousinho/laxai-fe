@@ -3,6 +3,8 @@
 import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import { useDropzone } from "react-dropzone";
+import { useErrorHandler } from '@/lib/useErrorHandler';
+import { ErrorPage } from '@/components/ErrorPage';
 
 
 
@@ -12,6 +14,10 @@ export default function Uploads() {
   const [videoFile, setVideoFile] = useState<{ fileName: string; signedUrl: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<{ task_id: string; status: string; message: string } | null>(null);
+
+  const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
   // On mount, fetch from API
   useEffect(() => {
@@ -71,16 +77,54 @@ export default function Uploads() {
     }
   };
 
+  const handleVideoAnalysis = async () => {
+    if (!videoFile) return;
+
+    setAnalyzing(true);
+    clearError();
+    setAnalysisResult(null);
+
+    try {
+      const res = await fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_filename: videoFile.fileName,
+          // Add any other required fields for the tracking request
+        }),
+      });
+
+      const isOk = await handleFetchError(res, 'handleVideoAnalysis');
+      if (!isOk) {
+        setAnalyzing(false);
+        return;
+      }
+
+      const data = await res.json();
+      setAnalysisResult(data);
+    } catch (error) {
+      console.error('Failed to start video analysis:', error);
+      handleApiError(error, 'handleVideoAnalysis');
+    }
+    setAnalyzing(false);
+  };
+
   const videoUrl = videoFile ? videoFile.signedUrl : null;
 
   return (
     <div className="py-8">
-      {loading ? (
+      {apiError ? (
+        <ErrorPage
+          error={apiError}
+          onRetry={clearError}
+          onDismiss={clearError}
+        />
+      ) : loading ? (
         <div className="text-center text-muted-foreground">Loading...</div>
       ) : error ? (
         <div className="text-center text-red-500">{error}</div>
       ) : !videoUrl ? (
-  <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
+        <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
       ) : (
         <div className="mt-6 text-center flex flex-col items-center gap-4">
           <p className="mb-2 text-lg font-medium">Video uploaded!</p>
@@ -112,6 +156,16 @@ export default function Uploads() {
             </div>
           )}
           <div className="text-sm text-muted-foreground">{videoFile?.fileName}</div>
+
+          {analysisResult && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h3 className="font-semibold text-green-800">Analysis Started!</h3>
+              <p className="text-sm text-green-700 mt-1">{analysisResult.message}</p>
+              <p className="text-xs text-green-600 mt-2">Task ID: {analysisResult.task_id}</p>
+              <p className="text-xs text-green-600">Status: {analysisResult.status}</p>
+            </div>
+          )}
+
           <div className="flex gap-4 mt-2">
             <button
               className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
@@ -120,13 +174,11 @@ export default function Uploads() {
               Delete
             </button>
             <button
-              className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
-              onClick={() => {
-                // TODO: Implement video analysis functionality
-                alert('Video analysis feature coming soon!');
-              }}
+              className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              onClick={handleVideoAnalysis}
+              disabled={analyzing}
             >
-              Start Video Analysis
+              {analyzing ? 'Starting Analysis...' : 'Start Video Analysis'}
             </button>
           </div>
         </div>

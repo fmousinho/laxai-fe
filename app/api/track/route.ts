@@ -10,28 +10,71 @@ if (!BACKEND_URL) {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log('Track API called with method:', req.method);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+
     const tenantId = await getTenantId(req);
     if (!tenantId) {
       return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
     }
 
-    const body = await req.json();
+    let body = {};
+    try {
+      const text = await req.text();
+      console.log('Request body text:', text);
+      if (text) {
+        body = JSON.parse(text);
+      }
+    } catch (error) {
+      console.error('Failed to parse request body:', error);
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
+
+    console.log('Parsed body:', body);
 
     // Authenticate with Google Cloud
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
-    // Make request to backend API
-    const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/track`,
-      method: 'POST',
-      data: {
-        ...body,
-        tenant_id: tenantId
-      }
+    // TEMPORARY: Return mock response for testing
+    const requestData = {
+      ...body,
+      tenant_id: tenantId
+    };
+    console.log('Would send to backend:', requestData);
+    return NextResponse.json({
+      task_id: `task_${Date.now()}`,
+      status: "queued",
+      message: "Tracking job queued successfully (mock)",
+      created_at: new Date().toISOString()
     });
 
+    /* 
+    // Make request to backend API
+    const requestData = {
+      ...body,
+      tenant_id: tenantId
+    };
+    console.log('Sending request data:', requestData);
+
+    let response;
+    try {
+      response = await client.request({
+        url: `${BACKEND_URL}/api/v1/track`,
+        method: 'POST',
+        data: requestData
+      });
+    } catch (backendError) {
+      console.error('Backend API error:', backendError);
+      const errorMessage = backendError instanceof Error ? backendError.message : 'Unknown backend error';
+      return NextResponse.json({
+        error: 'Backend service unavailable',
+        details: errorMessage
+      }, { status: 503 });
+    }
+
     return NextResponse.json(response.data);
+    */
   } catch (error) {
     console.error('Error creating tracking job:', error);
     return NextResponse.json({ error: 'Failed to create tracking job' }, { status: 500 });
