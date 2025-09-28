@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     // If process_folder is provided, start a session first
     if (processFolder) {
       await client.request({
-        url: `${BACKEND_URL}/dataprep/start`,
+        url: `${BACKEND_URL}/api/v1/dataprep/start`,
         method: 'POST',
         params: { tenant_id: tenantId },
         data: { process_folder: processFolder }
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     // Make request to backend API
     const response = await client.request({
-      url: `${BACKEND_URL}/dataprep/verification-images`,
+      url: `${BACKEND_URL}/api/v1/dataprep/verification-images`,
       method: 'GET',
       params: { tenant_id: tenantId }
     });
