@@ -10,8 +10,8 @@ import { ErrorPage } from '@/components/ErrorPage';
 
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
-  // videoFile: { fileName, signedUrl } | null
-  const [videoFile, setVideoFile] = useState<{ fileName: string; signedUrl: string } | null>(null);
+  // videoFile: { fileName, signedUrl, folder?, fullPath? } | null
+  const [videoFile, setVideoFile] = useState<{ fileName: string; signedUrl: string; folder?: string; fullPath?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -98,7 +98,9 @@ export default function Uploads() {
     setLoading(true);
     setError(null);
     try {
-      await axios.delete('/api/gcs/delete_video', { data: { fileName: videoFile.fileName } });
+      // Use fullPath if available, otherwise construct from fileName (assuming raw folder)
+      const filePath = videoFile.fullPath || `${videoFile.fileName}`;
+      await axios.delete('/api/gcs/delete_video', { data: { fileName: filePath } });
       // After delete, refresh video list
       const { data } = await axios.get('/api/gcs/list_video');
       if (data.files && data.files.length > 0) {

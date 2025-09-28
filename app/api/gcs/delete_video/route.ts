@@ -16,7 +16,12 @@ export async function DELETE(req: NextRequest) {
   if (!fileName) {
     return NextResponse.json({ error: 'Missing fileName' }, { status: 400 });
   }
-  const objectPath = `${tenantId}/raw/${fileName}`;
+  
+  // If fileName includes tenant prefix, use it as-is; otherwise, assume it's in raw folder
+  let objectPath = fileName;
+  if (!fileName.startsWith(`${tenantId}/`)) {
+    objectPath = `${tenantId}/raw/${fileName}`;
+  }
   try {
     await storage.bucket(bucketName!).file(objectPath).delete();
     return NextResponse.json({ success: true });
