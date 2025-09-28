@@ -16,8 +16,44 @@ export default function Uploads() {
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<{ task_id: string; status: string; message: string } | null>(null);
+  const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<string[]>([]);
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
 
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
+
+  // Function to start streaming progress updates
+  const startProgressStream = (taskId: string) => {
+    const eventSource = new EventSource(`/api/track/${taskId}/progress/stream`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setAnalysisProgress(prev => [...prev, data.message || data.status || 'Update received']);
+        
+        if (data.status === 'completed') {
+          setAnalysisStatus('completed');
+          eventSource.close();
+        } else if (data.status === 'failed') {
+          setAnalysisStatus('failed');
+          eventSource.close();
+        }
+      } catch (error) {
+        console.error('Error parsing progress data:', error);
+        setAnalysisProgress(prev => [...prev, 'Error parsing update']);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      setAnalysisProgress(prev => [...prev, 'Connection error - retrying...']);
+      setAnalysisStatus('failed');
+      eventSource.close();
+    };
+
+    // Store eventSource for cleanup if needed
+    return eventSource;
+  };
 
   // On mount, fetch from API
   useEffect(() => {
@@ -83,6 +119,8 @@ export default function Uploads() {
     setAnalyzing(true);
     clearError();
     setAnalysisResult(null);
+    setAnalysisProgress([]);
+    setAnalysisStatus('running');
 
     try {
       const res = await fetch('/api/track', {
@@ -97,14 +135,19 @@ export default function Uploads() {
       const isOk = await handleFetchError(res, 'handleVideoAnalysis');
       if (!isOk) {
         setAnalyzing(false);
+        setAnalysisStatus('failed');
         return;
       }
 
       const data = await res.json();
       setAnalysisResult(data);
+      setAnalysisTaskId(data.task_id);
+      // Start streaming progress updates
+      startProgressStream(data.task_id);
     } catch (error) {
       console.error('Failed to start video analysis:', error);
       handleApiError(error, 'handleVideoAnalysis');
+      setAnalysisStatus('failed');
     }
     setAnalyzing(false);
   };
@@ -157,30 +200,55 @@ export default function Uploads() {
           )}
           <div className="text-sm text-muted-foreground">{videoFile?.fileName}</div>
 
-          {analysisResult && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h3 className="font-semibold text-green-800">Analysis Started!</h3>
-              <p className="text-sm text-green-700 mt-1">{analysisResult.message}</p>
-              <p className="text-xs text-green-600 mt-2">Task ID: {analysisResult.task_id}</p>
-              <p className="text-xs text-green-600">Status: {analysisResult.status}</p>
+          {analysisStatus === 'running' ? (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-blue-800 mb-2">Video Analysis in Progress</h3>
+              <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto text-sm">
+                {analysisProgress.length === 0 ? (
+                  <p className="text-gray-500">Connecting to analysis stream...</p>
+                ) : (
+                  analysisProgress.map((message, index) => (
+                    <p key={index} className="mb-1 text-gray-700">{message}</p>
+                  ))
+                )}
+              </div>
+              {analysisTaskId && (
+                <p className="text-xs text-blue-600 mt-2">Task ID: {analysisTaskId}</p>
+              )}
+            </div>
+          ) : analysisStatus === 'completed' ? (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-green-800">Analysis Completed!</h3>
+              <p className="text-sm text-green-700 mt-1">Video analysis has finished successfully.</p>
+              {analysisTaskId && (
+                <p className="text-xs text-green-600 mt-2">Task ID: {analysisTaskId}</p>
+              )}
+            </div>
+          ) : analysisStatus === 'failed' ? (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-red-800">Analysis Failed</h3>
+              <p className="text-sm text-red-700 mt-1">Video analysis encountered an error.</p>
+              {analysisTaskId && (
+                <p className="text-xs text-red-600 mt-2">Task ID: {analysisTaskId}</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-4 mt-2">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                onClick={handleVideoAnalysis}
+                disabled={analyzing}
+              >
+                {analyzing ? 'Starting Analysis...' : 'Start Video Analysis'}
+              </button>
             </div>
           )}
-
-          <div className="flex gap-4 mt-2">
-            <button
-              className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
-              onClick={handleDelete}
-            >
-              Delete
-            </button>
-            <button
-              className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50"
-              onClick={handleVideoAnalysis}
-              disabled={analyzing}
-            >
-              {analyzing ? 'Starting Analysis...' : 'Start Video Analysis'}
-            </button>
-          </div>
         </div>
       )}
     </div>
