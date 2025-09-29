@@ -26,7 +26,7 @@ export async function GET(
 
     // Get the authorization header for the progress stream endpoint
     const progressStreamUrl = `${BACKEND_URL}/api/v1/track/${task_id}/progress/stream`;
-    const requestHeaders = await auth.getRequestHeaders(progressStreamUrl);
+    const requestHeaders = await client.getRequestHeaders(progressStreamUrl);
     const authHeader = requestHeaders.get('Authorization');
 
     if (!authHeader) {
