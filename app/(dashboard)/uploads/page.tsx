@@ -6,6 +6,35 @@ import { useDropzone } from "react-dropzone";
 import { useErrorHandler } from '@/lib/useErrorHandler';
 import { ErrorPage } from '@/components/ErrorPage';
 
+// State machine types
+type UploadStateType = 
+  | 'initial'           // drop zone only
+  | 'uploading'         // progress bar shown
+  | 'preparing'         // brief "Processing file..." after upload
+  | 'ready'             // player + buttons shown
+  | 'analysing'         // analysis in progress
+  | 'analysis_complete' // analysis finished
+  | 'failed_upload'     // upload failed
+  | 'failed_analysis'   // analysis failed
+  | 'deleting';         // file being deleted
+
+interface VideoFile {
+  fileName: string;
+  fullPath?: string;
+  signedUrl?: string;
+  size?: number;
+  created?: string;
+}
+
+interface UploadState {
+  type: UploadStateType;
+  videoFile?: VideoFile;
+  uploadProgress?: number;
+  analysisTaskId?: string;
+  analysisProgress?: string[];
+  error?: string;
+}
+
 
 
 // Simple runtime error boundary (client side) to surface errors instead of blank screen
@@ -41,15 +70,29 @@ function RuntimeErrorBoundary({ children }: { children: React.ReactNode }) {
 
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
-  // videoFile: { fileName, signedUrl, folder?, fullPath? } | null
-  const [videoFile, setVideoFile] = useState<{ fileName: string; signedUrl: string; folder?: string; fullPath?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<{ task_id: string; status: string; message: string } | null>(null);
-  const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
-  const [analysisProgress, setAnalysisProgress] = useState<string[]>([]);
-  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
+  
+  // Unified state management with persistence
+  const [uploadState, setUploadState] = useState<UploadState>(() => {
+    // Try to restore from sessionStorage
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('uploadState');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.warn('Failed to parse saved upload state:', e);
+        }
+      }
+    }
+    return { type: 'initial' };
+  });
+
+  // Persist state changes to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('uploadState', JSON.stringify(uploadState));
+    }
+  }, [uploadState]);
 
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
@@ -58,49 +101,47 @@ export default function Uploads() {
     const eventSource = new EventSource(`/api/track/${taskId}/progress/stream`);
 
     eventSource.onmessage = (event) => {
+      console.log('Raw event data:', event.data);
       try {
         const data = JSON.parse(event.data);
         
         // Handle different status types
-        switch (data.status) {
-          case 'waiting':
-            setAnalysisProgress(prev => [...prev, data.message || 'Waiting for job to start...']);
-            setAnalysisStatus('running'); // Map waiting to running status
-            break;
-          case 'started':
-            setAnalysisProgress(prev => [...prev, data.message || 'Job has started processing...']);
-            setAnalysisStatus('running'); // Map started to running status
-            break;
-          case 'processing':
-            const progressMsg = data.progress !== undefined 
+        setUploadState(prev => {
+          const newProgress = [...(prev.analysisProgress || []), 
+            data.status === 'processing' 
               ? `Processing: ${Math.round(data.progress)}% complete`
-              : data.message || 'Processing...';
-            setAnalysisProgress(prev => [...prev, progressMsg]);
-            setAnalysisStatus('running'); // Map processing to running status
-            break;
-          case 'completed':
-            setAnalysisProgress(prev => [...prev, data.message || 'Analysis completed successfully']);
-            setAnalysisStatus('completed');
-            eventSource.close();
-            break;
-          case 'failed':
-            setAnalysisProgress(prev => [...prev, data.message || 'Analysis failed']);
-            setAnalysisStatus('failed');
-            eventSource.close();
-            break;
-          default:
-            setAnalysisProgress(prev => [...prev, data.message || data.status || 'Update received']);
-        }
+              : data.message || data.status || 'Update received'
+          ];
+          
+          switch (data.status) {
+            case 'waiting':
+            case 'started':
+            case 'processing':
+              return { ...prev, type: 'analysing' as const, analysisProgress: newProgress };
+            case 'completed':
+              return { ...prev, type: 'analysis_complete' as const, analysisProgress: newProgress };
+            case 'failed':
+              return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
+            default:
+              return { ...prev, analysisProgress: newProgress };
+          }
+        });
       } catch (error) {
         console.error('Error parsing progress data:', error);
-        setAnalysisProgress(prev => [...prev, 'Error parsing update']);
+        setUploadState(prev => ({
+          ...prev,
+          analysisProgress: [...(prev.analysisProgress || []), 'Error parsing update']
+        }));
       }
     };
 
     eventSource.onerror = (error) => {
       console.error('EventSource error:', error);
-      setAnalysisProgress(prev => [...prev, 'Connection error - retrying...']);
-      setAnalysisStatus('failed');
+      setUploadState(prev => ({
+        ...prev,
+        type: 'failed_analysis',
+        analysisProgress: [...(prev.analysisProgress || []), 'Connection error - retrying...']
+      }));
       eventSource.close();
     };
 
@@ -108,102 +149,339 @@ export default function Uploads() {
     return eventSource;
   };
 
-  // On mount, fetch from API
+  // On mount, check for existing files
   useEffect(() => {
-    const fetchVideo = async () => {
-      setLoading(true);
-      setError(null);
+    const checkExistingFiles = async () => {
       try {
         const { data } = await axios.get('/api/gcs/list_video');
         if (data.files && data.files.length > 0) {
-          setVideoFile(data.files[0]);
-        } else {
-          setVideoFile(null);
+          setUploadState(prev => ({
+            ...prev,
+            type: 'ready',
+            videoFile: data.files[0]
+          }));
         }
       } catch (err) {
-        setError('Failed to load video info');
-        setVideoFile(null);
-      } finally {
-        setLoading(false);
+        console.warn('Failed to check for existing files:', err);
+        // Don't set error state, just stay in initial state
       }
     };
-    fetchVideo();
+    checkExistingFiles();
   }, []);
 
   const handleUploadComplete = (signedUrl: string, fileName: string) => {
-    // After upload, set video file directly with the signedUrl
-    setVideoFile({
-      fileName,
-      signedUrl,
-      folder: 'uploads', // or extract from signedUrl if needed
-      fullPath: signedUrl
-    });
-    setLoading(false);
-    setError(null);
+    // After upload, set video file and transition to preparing state
+    setUploadState(prev => ({
+      ...prev,
+      type: 'preparing',
+      videoFile: {
+        fileName,
+        signedUrl,
+        fullPath: signedUrl
+      }
+    }));
+
+    // After a brief delay, transition to ready state
+    setTimeout(() => {
+      setUploadState(prev => {
+        if (prev.type === 'preparing') {
+          return { ...prev, type: 'ready' };
+        }
+        return prev;
+      });
+    }, 2000);
   };
 
   const handleDelete = async () => {
-    if (!videoFile) return;
-    setLoading(true);
-    setError(null);
+    if (!uploadState.videoFile) return;
+    
+    setUploadState(prev => ({ ...prev, type: 'deleting' }));
+    
     try {
-      // Use fullPath if available, otherwise construct from fileName (assuming raw folder)
-      const filePath = videoFile.fullPath || `${videoFile.fileName}`;
+      const filePath = uploadState.videoFile!.fullPath || uploadState.videoFile!.fileName;
       await axios.delete('/api/gcs/delete_video', { data: { fileName: filePath } });
-      // After delete, refresh video list
+      
+      // Check if there are other files
       const { data } = await axios.get('/api/gcs/list_video');
       if (data.files && data.files.length > 0) {
-        setVideoFile(data.files[0]);
+        setUploadState(prev => ({
+          ...prev,
+          type: 'ready',
+          videoFile: data.files[0]
+        }));
       } else {
-        setVideoFile(null);
+        setUploadState({ type: 'initial' });
       }
     } catch (err) {
-      setError('Failed to delete video');
-    } finally {
-      setLoading(false);
+      setUploadState(prev => ({
+        ...prev,
+        type: 'ready',
+        error: 'Failed to delete video'
+      }));
     }
   };
 
   const handleVideoAnalysis = async () => {
-    if (!videoFile) return;
+    if (!uploadState.videoFile) return;
 
-    setAnalyzing(true);
+    setUploadState(prev => ({
+      ...prev,
+      type: 'analysing',
+      analysisProgress: [],
+      analysisTaskId: undefined
+    }));
     clearError();
-    setAnalysisResult(null);
-    setAnalysisProgress([]);
-    setAnalysisStatus('running');
 
     try {
       const res = await fetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          video_filename: videoFile.fileName,
-          // Add any other required fields for the tracking request
+          video_filename: uploadState.videoFile!.fileName,
         }),
       });
 
       const isOk = await handleFetchError(res, 'handleVideoAnalysis');
       if (!isOk) {
-        setAnalyzing(false);
-        setAnalysisStatus('failed');
+        setUploadState(prev => ({ ...prev, type: 'failed_analysis' }));
         return;
       }
 
       const data = await res.json();
-      setAnalysisResult(data);
-      setAnalysisTaskId(data.task_id);
+      setUploadState(prev => ({
+        ...prev,
+        analysisTaskId: data.task_id
+      }));
       // Start streaming progress updates
       startProgressStream(data.task_id);
     } catch (error) {
       console.error('Failed to start video analysis:', error);
       handleApiError(error, 'handleVideoAnalysis');
-      setAnalysisStatus('failed');
+      setUploadState(prev => ({ ...prev, type: 'failed_analysis' }));
     }
-    setAnalyzing(false);
   };
 
-  const videoUrl = videoFile ? videoFile.signedUrl : null;
+  const videoUrl = uploadState.videoFile?.signedUrl || null;
+
+  // Render functions for each state
+  const renderContent = () => {
+    switch (uploadState.type) {
+      case 'initial':
+        return <GCSVideoUploader 
+          onUploadCompleteAction={handleUploadComplete} 
+          onUploadStart={() => setUploadState(prev => ({ ...prev, type: 'uploading' }))}
+          onUploadError={(error) => setUploadState(prev => ({ ...prev, type: 'failed_upload', error }))}
+        />;
+
+      case 'uploading':
+        return <GCSVideoUploader 
+          onUploadCompleteAction={handleUploadComplete} 
+          onUploadStart={() => setUploadState(prev => ({ ...prev, type: 'uploading' }))}
+          onUploadError={(error) => setUploadState(prev => ({ ...prev, type: 'failed_upload', error }))}
+        />;
+
+      case 'preparing':
+        return (
+          <div className="text-center text-muted-foreground">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+            <p>Preparing file...</p>
+          </div>
+        );
+
+      case 'ready':
+        return (
+          <div className="mt-6 text-center flex flex-col items-center gap-4">
+            <p className="mb-2 text-lg font-medium">Video uploaded!</p>
+            <video
+              src={videoUrl!}
+              controls
+              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+              style={{ maxWidth: 400 }}
+              onClick={() => setShowModal(true)}
+            />
+            {showModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                  <video
+                    src={videoUrl!}
+                    controls
+                    autoPlay
+                    className="rounded-lg border bg-black shadow-2xl"
+                    style={{ maxWidth: '90vw', maxHeight: '80vh' }}
+                  />
+                  <button
+                    className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
+                    onClick={() => setShowModal(false)}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
+            <div className="flex gap-4 mt-2">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+                onClick={handleVideoAnalysis}
+              >
+                Start Video Analysis
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'analysing':
+        return (
+          <div className="mt-6 text-center flex flex-col items-center gap-4">
+            <p className="mb-2 text-lg font-medium">Video uploaded!</p>
+            <video
+              src={videoUrl!}
+              controls
+              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+              style={{ maxWidth: 400 }}
+              onClick={() => setShowModal(true)}
+            />
+            {showModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                  <video
+                    src={videoUrl!}
+                    controls
+                    autoPlay
+                    className="rounded-lg border bg-black shadow-2xl"
+                    style={{ maxWidth: '90vw', maxHeight: '80vh' }}
+                  />
+                  <button
+                    className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
+                    onClick={() => setShowModal(false)}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-blue-800 mb-2">Video Analysis in Progress</h3>
+              <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto text-sm">
+                {uploadState.analysisProgress?.length === 0 ? (
+                  <p className="text-gray-500">Connecting to analysis stream...</p>
+                ) : (
+                  uploadState.analysisProgress?.map((message, index) => (
+                    <p key={index} className="mb-1 text-gray-700">{message}</p>
+                  ))
+                )}
+              </div>
+              {uploadState.analysisTaskId && (
+                <p className="text-xs text-blue-600 mt-2">Task ID: {uploadState.analysisTaskId}</p>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'analysis_complete':
+        return (
+          <div className="mt-6 text-center flex flex-col items-center gap-4">
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-green-800">Analysis Completed!</h3>
+              <p className="text-sm text-green-700 mt-1">Video analysis has finished successfully.</p>
+              {uploadState.analysisTaskId && (
+                <p className="text-xs text-green-600 mt-2">Task ID: {uploadState.analysisTaskId}</p>
+              )}
+              <button
+                className="mt-4 px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+                onClick={() => setUploadState({ type: 'initial' })}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'failed_upload':
+        return (
+          <div className="text-center">
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-red-800">Upload Failed</h3>
+              <p className="text-sm text-red-700 mt-1">{uploadState.error || 'An error occurred during upload.'}</p>
+              <button
+                className="mt-4 px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+                onClick={() => setUploadState({ type: 'initial' })}
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'failed_analysis':
+        return (
+          <div className="mt-6 text-center flex flex-col items-center gap-4">
+            <p className="mb-2 text-lg font-medium">Video uploaded!</p>
+            <video
+              src={videoUrl!}
+              controls
+              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+              style={{ maxWidth: 400 }}
+              onClick={() => setShowModal(true)}
+            />
+            {showModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                  <video
+                    src={videoUrl!}
+                    controls
+                    autoPlay
+                    className="rounded-lg border bg-black shadow-2xl"
+                    style={{ maxWidth: '90vw', maxHeight: '80vh' }}
+                  />
+                  <button
+                    className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
+                    onClick={() => setShowModal(false)}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+              <h3 className="font-semibold text-red-800">Analysis Failed</h3>
+              <p className="text-sm text-red-700 mt-1">Video analysis encountered an error.</p>
+              {uploadState.analysisTaskId && (
+                <p className="text-xs text-red-600 mt-2">Task ID: {uploadState.analysisTaskId}</p>
+              )}
+              <button
+                className="mt-4 px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+                onClick={() => setUploadState({ type: 'initial' })}
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'deleting':
+        return (
+          <div className="text-center text-muted-foreground">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+            <p>Deleting file...</p>
+          </div>
+        );
+
+      default:
+        return <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />;
+    }
+  };
 
   return (
     <RuntimeErrorBoundary>
@@ -214,94 +492,8 @@ export default function Uploads() {
           onRetry={clearError}
           onDismiss={clearError}
         />
-      ) : loading ? (
-        <div className="text-center text-muted-foreground">Loading...</div>
-      ) : error ? (
-        <div className="text-center text-red-500">{error}</div>
-      ) : !videoUrl ? (
-        <GCSVideoUploader onUploadCompleteAction={handleUploadComplete} />
       ) : (
-        <div className="mt-6 text-center flex flex-col items-center gap-4">
-          <p className="mb-2 text-lg font-medium">Video uploaded!</p>
-          <video
-            src={videoUrl}
-            controls
-            className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
-            style={{ maxWidth: 400 }}
-            onClick={() => setShowModal(true)}
-          />
-          {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
-              <div className="relative" onClick={e => e.stopPropagation()}>
-                <video
-                  src={videoUrl}
-                  controls
-                  autoPlay
-                  className="rounded-lg border bg-black shadow-2xl"
-                  style={{ maxWidth: '90vw', maxHeight: '80vh' }}
-                />
-                <button
-                  className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
-                  onClick={() => setShowModal(false)}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
-          <div className="text-sm text-muted-foreground">{videoFile?.fileName}</div>
-
-          {analysisStatus === 'running' ? (
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-              <h3 className="font-semibold text-blue-800 mb-2">Video Analysis in Progress</h3>
-              <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto text-sm">
-                {analysisProgress.length === 0 ? (
-                  <p className="text-gray-500">Connecting to analysis stream...</p>
-                ) : (
-                  analysisProgress.map((message, index) => (
-                    <p key={index} className="mb-1 text-gray-700">{message}</p>
-                  ))
-                )}
-              </div>
-              {analysisTaskId && (
-                <p className="text-xs text-blue-600 mt-2">Task ID: {analysisTaskId}</p>
-              )}
-            </div>
-          ) : analysisStatus === 'completed' ? (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg max-w-md mx-auto">
-              <h3 className="font-semibold text-green-800">Analysis Completed!</h3>
-              <p className="text-sm text-green-700 mt-1">Video analysis has finished successfully.</p>
-              {analysisTaskId && (
-                <p className="text-xs text-green-600 mt-2">Task ID: {analysisTaskId}</p>
-              )}
-            </div>
-          ) : analysisStatus === 'failed' ? (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
-              <h3 className="font-semibold text-red-800">Analysis Failed</h3>
-              <p className="text-sm text-red-700 mt-1">Video analysis encountered an error.</p>
-              {analysisTaskId && (
-                <p className="text-xs text-red-600 mt-2">Task ID: {analysisTaskId}</p>
-              )}
-            </div>
-          ) : (
-            <div className="flex gap-4 mt-2">
-              <button
-                className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
-                onClick={handleDelete}
-              >
-                Delete
-              </button>
-              <button
-                className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50"
-                onClick={handleVideoAnalysis}
-                disabled={analyzing}
-              >
-                {analyzing ? 'Starting Analysis...' : 'Start Video Analysis'}
-              </button>
-            </div>
-          )}
-        </div>
+        renderContent()
       )}
     </div>
     </RuntimeErrorBoundary>
@@ -311,9 +503,11 @@ export default function Uploads() {
 
 type VideoUploaderProps = {
   onUploadCompleteAction: (signedUrl: string, fileName: string) => void;
+  onUploadStart?: () => void;
+  onUploadError?: (error: string) => void;
 };
 
-function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
+function GCSVideoUploader({ onUploadCompleteAction, onUploadStart, onUploadError }: VideoUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -410,6 +604,7 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
   // Upload logic
   const uploadFile = async (file: File) => {
     setUploading(true);
+    onUploadStart?.();
     setUploadProgress(0);
     
     // Check if Safari and file is large
@@ -470,7 +665,7 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
       console.error('Full error object:', error);
-      alert(`Upload failed: ${error.message || 'Check console for details'}`);
+      onUploadError?.(error.message || 'Upload failed');
       setUploadProgress(0);
     } finally {
       setUploading(false);

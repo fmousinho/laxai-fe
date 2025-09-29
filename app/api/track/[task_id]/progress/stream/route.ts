@@ -65,6 +65,10 @@ export async function GET(
               const { done, value } = await reader.read();
               if (done) break;
 
+              // Convert Uint8Array to string for logging
+              const chunk = new TextDecoder().decode(value);
+              console.log(`SSE chunk for task ${task_id}:`, chunk);
+
               controller.enqueue(value);
             }
 
