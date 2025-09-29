@@ -69,11 +69,32 @@ export function useErrorHandler(): UseErrorHandlerReturn {
     }
 
     if (!response.ok) {
-      const errorText = `HTTP ${response.status}: ${response.statusText}`;
-      console.error(`Fetch Error${context ? ` in ${context}` : ''}:`, errorText);
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      let errorDetails = errorMessage;
+
+      try {
+        const errorData = await response.json();
+        console.error(`Fetch Error${context ? ` in ${context}` : ''}:`, errorData);
+
+        // Extract meaningful error message from backend response
+        if (errorData?.error) {
+          errorMessage = errorData.error;
+          errorDetails = errorData.details || errorData.error;
+        } else if (errorData?.message) {
+          errorMessage = errorData.message;
+          errorDetails = errorData;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+          errorDetails = errorData;
+        }
+      } catch (parseError) {
+        console.error(`Failed to parse error response${context ? ` in ${context}` : ''}:`, parseError);
+        // Keep the default HTTP error message and details
+      }
+
       setError({
-        message: 'Request failed',
-        details: errorText,
+        message: errorMessage,
+        details: errorDetails,
         statusCode: response.status
       });
       return false; // Error handled
