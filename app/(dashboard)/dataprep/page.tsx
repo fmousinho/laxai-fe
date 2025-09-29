@@ -53,6 +53,7 @@ export default function DataPrepPage() {
 			setLoadingVideos(true);
 			try {
 				const { data } = await axios.get('/api/gcs/list_video');
+				console.log('GCS list_video response:', data);
 				setVideos(data.files || []);
 			} catch (err) {
 				console.error('Failed to load videos:', err);
@@ -64,29 +65,77 @@ export default function DataPrepPage() {
 		fetchVideos();
 	}, []);
 
-	const fetchPair = async () => {
+	const fetchPairForVideo = async (video: VideoFile) => {
 		setLoading(true);
 		clearError(); // Clear any previous errors
-		// TODO: Replace with real API call that includes selected video
-		const processFolder = selectedVideo?.fileName;
-		const url = processFolder
-			? `/api/dataprep/track_pair_for_verification?process_folder=${encodeURIComponent(processFolder)}`
-			: '/api/dataprep/track_pair_for_verification';
+		
+		// Extract just the video name from the full GCS path
+		// video.fileName might be like "path/imported/video.mp4" or just "video.mp4"
+		let processFolder = video.fileName;
+		
+		// If fileName contains "/imported/", extract just the base name
+		if (processFolder.includes('/imported/')) {
+			const parts = processFolder.split('/imported/');
+			processFolder = parts[parts.length - 1]; // Get the last part (actual filename)
+		}
+		
+		// Remove any leading/trailing whitespace and path separators
+		processFolder = processFolder.trim().replace(/^\/+|\/+$/g, '');
+		
+		console.log('Original fileName:', video.fileName);
+		console.log('Extracted processFolder:', processFolder);
+		
+		const url = `/api/dataprep/track_pair_for_verification?process_folder=${encodeURIComponent(processFolder)}`;
+		console.log('Fetching pair for video from URL:', url);
+		
 		try {
 			const res = await fetch(url);
-			const isOk = await handleFetchError(res, 'fetchPair');
+			console.log('Fetch response status:', res.status);
+			const isOk = await handleFetchError(res, 'fetchPairForVideo');
 			if (!isOk) {
+				console.log('Fetch error handled');
 				setLoading(false);
 				return;
 			}
 			const data = await res.json();
-			setImagePair(data);
+			console.log('Received data:', data);
+			
+			// Validate the response format
+			if (!data || typeof data !== 'object') {
+				console.error('Invalid response format - expected object');
+				handleApiError({ message: 'Invalid response format from server' }, 'fetchPairForVideo');
+				setLoading(false);
+				return;
+			}
+			
+			if (!data.imagesA || !Array.isArray(data.imagesA) || !data.imagesB || !Array.isArray(data.imagesB)) {
+				console.error('Invalid response format - expected imagesA and imagesB arrays');
+				handleApiError({ message: 'Server returned invalid image data format' }, 'fetchPairForVideo');
+				setLoading(false);
+				return;
+			}
+			
+			if (data.imagesA.length === 0 || data.imagesB.length === 0) {
+				console.log('No images available for comparison');
+				setImagePair(null);
+				// Don't show as error, just no data available
+			} else {
+				setImagePair(data);
+			}
 		} catch (error) {
 			console.error('Failed to fetch pair:', error);
 			// For network errors, use handleApiError
-			handleApiError(error, 'fetchPair');
+			handleApiError(error, 'fetchPairForVideo');
 		}
 		setLoading(false);
+	};
+
+	const fetchPair = async () => {
+		if (!selectedVideo) {
+			console.error('No selected video for fetchPair');
+			return;
+		}
+		await fetchPairForVideo(selectedVideo);
 	};
 
 	const handleStart = async () => {
@@ -102,8 +151,10 @@ export default function DataPrepPage() {
 		setSuspended(false);
 		setImagePair(null);
 		clearError(); // Clear any errors when starting new video
-		// Automatically start the comparison
-		await handleStart();
+		// Automatically start the comparison with the video parameter
+		setStarted(true);
+		setSuspended(false);
+		await fetchPairForVideo(video);
 	};
 
 	const handleBackToList = () => {
@@ -330,6 +381,30 @@ export default function DataPrepPage() {
 								</button>
 							</div>
 						</>
+					)}
+
+					{started && !imagePair && !loading && (
+						<div className="text-center py-8">
+							<div className="mb-4">
+								<div className="text-lg font-medium text-orange-600 mb-2">⏳ Video Not Ready</div>
+								<p className="text-muted-foreground mb-2">This video hasn't been processed for data preparation yet.</p>
+								<p className="text-sm text-muted-foreground">Please ensure the video has been through the analysis pipeline first.</p>
+							</div>
+							<div className="flex gap-3 justify-center">
+								<Button
+									onClick={handleBackToList}
+									variant="outline"
+								>
+									Back to Videos
+								</Button>
+								<Button
+									onClick={() => window.open('/uploads', '_blank')}
+									variant="default"
+								>
+									Process Video
+								</Button>
+							</div>
+						</div>
 					)}
 				</div>
 			)}
