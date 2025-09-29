@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // Make request to backend API
     const response = await client.request({
-      url: `${BACKEND_URL}/dataprep/suspend`,
+      url: `${BACKEND_URL}/api/v1/dataprep/suspend`,
       method: 'POST',
       params: { tenant_id: tenantId }
     });

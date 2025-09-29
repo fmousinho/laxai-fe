@@ -8,7 +8,42 @@ if (!BACKEND_URL) {
   throw new Error('BACKEND_API_URL environment variable is not set');
 }
 
-export async function GET(req: NextRequest) {
+async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promise<string[]> {
+  const allUrls: string[] = [];
+  
+  for (const prefix of prefixes) {
+    try {
+      // Remove gs:// prefix and split bucket/path
+      const prefixWithoutGs = prefix.replace('gs://', '');
+      const [bucketName, ...pathParts] = prefixWithoutGs.split('/');
+      const prefixPath = pathParts.join('/');
+      
+      console.log(`Listing files in gs://${bucketName}/${prefixPath}`);
+      
+      const [files] = await storage.bucket(bucketName).getFiles({
+        prefix: prefixPath,
+        // Only get image files
+        matchGlob: '**/*.{jpg,jpeg,png,gif,webp}'
+      });
+      
+      // Convert to public URLs
+      const urls = files.map((file: any) => {
+        return `https://storage.googleapis.com/${bucketName}/${file.name}`;
+      });
+      
+      allUrls.push(...urls);
+      console.log(`Found ${urls.length} images in ${prefix}`);
+      
+    } catch (error) {
+      console.error(`Error listing files for prefix ${prefix}:`, error);
+      // Continue with other prefixes
+    }
+  }
+  
+  return allUrls;
+}
+
+export async function POST(req: NextRequest) {
   try {
     const tenantId = await getTenantId(req);
     if (!tenantId) {
@@ -16,21 +51,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const processFolder = searchParams.get('process_folder');
-    console.log('Process folder:', processFolder);
+    const body = await req.json();
+    const { video_id } = body;
+    console.log('Video ID:', video_id);
     console.log('Tenant ID:', tenantId);
 
     // Authenticate with Google Cloud
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
-    // If process_folder is provided, start a session first
-    if (processFolder) {
-      console.log('Starting session for process folder:', processFolder);
+    // If video_id is provided, start a session first
+    if (video_id) {
+      console.log('Starting session for video:', video_id);
       try {
         const startUrl = `${BACKEND_URL}/api/v1/dataprep/start?tenant_id=${encodeURIComponent(tenantId)}`;
-        const requestBody = { process_folder: processFolder };
+        const requestBody = { video_id: video_id };
         console.log('Start URL:', startUrl);
         console.log('Start request body:', requestBody);
         const startResponse = await client.request({
@@ -47,8 +82,8 @@ export async function GET(req: NextRequest) {
         const sessionData = startResponse.data as any;
         if (!sessionData.success) {
           console.error('Backend failed to start session:', sessionData.message);
-          return NextResponse.json({ 
-            error: 'Failed to start session', 
+          return NextResponse.json({
+            error: 'Failed to start session',
             details: sessionData.message || 'Backend could not start session for this video'
           }, { status: 400 });
         }
@@ -64,11 +99,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Make request to backend API
-    console.log('Fetching verification images for tenant:', tenantId, 'process folder:', processFolder);
+    console.log('Fetching verification images for tenant:', tenantId, 'video:', video_id);
     let verificationUrl = `${BACKEND_URL}/api/v1/dataprep/verification-images?tenant_id=${encodeURIComponent(tenantId)}`;
-    if (processFolder) {
-      verificationUrl += `&process_folder=${encodeURIComponent(processFolder)}`;
-    }
     console.log('Verification URL:', verificationUrl);
     const response = await client.request({
       url: verificationUrl,
@@ -84,6 +116,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Backend returned invalid response format' }, { status: 502 });
     }
     
+    // Handle new API format with group prefixes
+    if (data.group1_prefixes && data.group2_prefixes) {
+      console.log('Received new API format with prefixes, converting to image URLs...');
+      
+      try {
+        // Import GCS utilities
+        const { Storage } = require('@google-cloud/storage');
+        const storage = new Storage();
+        
+        // Convert prefixes to image URLs
+        const imagesA = await getImageUrlsFromPrefixes(storage, data.group1_prefixes);
+        const imagesB = await getImageUrlsFromPrefixes(storage, data.group2_prefixes);
+        
+        const transformedData = {
+          imagesA,
+          imagesB,
+          group1_id: data.group1_id,
+          group2_id: data.group2_id,
+          total_pairs: data.total_pairs,
+          verified_pairs: data.verified_pairs,
+          status: data.status
+        };
+        
+        console.log(`Returning ${imagesA.length} imagesA and ${imagesB.length} imagesB`);
+        return NextResponse.json(transformedData);
+        
+      } catch (conversionError) {
+        console.error('Error converting prefixes to image URLs:', conversionError);
+        return NextResponse.json({ error: 'Failed to convert image prefixes to URLs' }, { status: 502 });
+      }
+    }
+    
+    // Fallback for old format (if backend still returns imagesA/imagesB)
     if (!data.imagesA || !Array.isArray(data.imagesA) || !data.imagesB || !Array.isArray(data.imagesB)) {
       console.error('Backend returned invalid image data format:', data);
       return NextResponse.json({ error: 'Backend returned invalid image data format', data }, { status: 502 });

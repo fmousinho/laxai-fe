@@ -83,13 +83,19 @@ export default function DataPrepPage() {
 		processFolder = processFolder.trim().replace(/^\/+|\/+$/g, '');
 		
 		console.log('Original fileName:', video.fileName);
-		console.log('Extracted processFolder:', processFolder);
+		console.log('Extracted video_id:', processFolder);
 		
-		const url = `/api/dataprep/track_pair_for_verification?process_folder=${encodeURIComponent(processFolder)}`;
+		const url = `/api/dataprep/track_pair_for_verification`;
 		console.log('Fetching pair for video from URL:', url);
 		
 		try {
-			const res = await fetch(url);
+			const res = await fetch(url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ video_id: processFolder }),
+			});
 			console.log('Fetch response status:', res.status);
 			const isOk = await handleFetchError(res, 'fetchPairForVideo');
 			if (!isOk) {

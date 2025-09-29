@@ -29,14 +29,36 @@ export default function Uploads() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        setAnalysisProgress(prev => [...prev, data.message || data.status || 'Update received']);
         
-        if (data.status === 'completed') {
-          setAnalysisStatus('completed');
-          eventSource.close();
-        } else if (data.status === 'failed') {
-          setAnalysisStatus('failed');
-          eventSource.close();
+        // Handle different status types
+        switch (data.status) {
+          case 'waiting':
+            setAnalysisProgress(prev => [...prev, data.message || 'Waiting for job to start...']);
+            setAnalysisStatus('running'); // Map waiting to running status
+            break;
+          case 'started':
+            setAnalysisProgress(prev => [...prev, data.message || 'Job has started processing...']);
+            setAnalysisStatus('running'); // Map started to running status
+            break;
+          case 'processing':
+            const progressMsg = data.progress !== undefined 
+              ? `Processing: ${data.progress}% complete`
+              : data.message || 'Processing...';
+            setAnalysisProgress(prev => [...prev, progressMsg]);
+            setAnalysisStatus('running'); // Map processing to running status
+            break;
+          case 'completed':
+            setAnalysisProgress(prev => [...prev, data.message || 'Analysis completed successfully']);
+            setAnalysisStatus('completed');
+            eventSource.close();
+            break;
+          case 'failed':
+            setAnalysisProgress(prev => [...prev, data.message || 'Analysis failed']);
+            setAnalysisStatus('failed');
+            eventSource.close();
+            break;
+          default:
+            setAnalysisProgress(prev => [...prev, data.message || data.status || 'Update received']);
         }
       } catch (error) {
         console.error('Error parsing progress data:', error);
