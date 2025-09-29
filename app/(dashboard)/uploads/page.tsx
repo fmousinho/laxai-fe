@@ -73,7 +73,7 @@ export default function Uploads() {
             break;
           case 'processing':
             const progressMsg = data.progress !== undefined 
-              ? `Processing: ${data.progress}% complete`
+              ? `Processing: ${Math.round(data.progress)}% complete`
               : data.message || 'Processing...';
             setAnalysisProgress(prev => [...prev, progressMsg]);
             setAnalysisStatus('running'); // Map processing to running status
@@ -130,20 +130,16 @@ export default function Uploads() {
     fetchVideo();
   }, []);
 
-  const handleUploadComplete = () => {
-    // After upload, refetch video list
-    setLoading(true);
+  const handleUploadComplete = (signedUrl: string, fileName: string) => {
+    // After upload, set video file directly with the signedUrl
+    setVideoFile({
+      fileName,
+      signedUrl,
+      folder: 'uploads', // or extract from signedUrl if needed
+      fullPath: signedUrl
+    });
+    setLoading(false);
     setError(null);
-    axios.get('/api/gcs/list_video')
-      .then(({ data }) => {
-        if (data.files && data.files.length > 0) {
-          setVideoFile(data.files[0]);
-        } else {
-          setVideoFile(null);
-        }
-      })
-      .catch(() => setError('Failed to load video info'))
-      .finally(() => setLoading(false));
   };
 
   const handleDelete = async () => {
@@ -314,7 +310,7 @@ export default function Uploads() {
 }
 
 type VideoUploaderProps = {
-  onUploadCompleteAction: () => void;
+  onUploadCompleteAction: (signedUrl: string, fileName: string) => void;
 };
 
 function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
@@ -379,7 +375,7 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
     // Simulate progress for large files in Safari
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => {
-        if (prev < 90) return prev + Math.random() * 10;
+        if (prev < 90) return Math.round(prev + Math.random() * 10);
         return prev;
       });
     }, 2000);
@@ -465,8 +461,8 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
       console.log('=== UPLOAD SUCCESS ===');
       setSelectedFileName(null);
       setUploadProgress(100);
-      // After upload, refetch video list and use signedUrl
-      onUploadCompleteAction();
+      // After upload, set video file directly with signedUrl
+      onUploadCompleteAction(signedUrl, file.name);
     } catch (error: any) {
       console.error('=== UPLOAD ERROR ===');
       console.error('Error type:', error.constructor.name);
@@ -534,7 +530,7 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <p className="text-lg font-medium mb-2">
-          {isDragActive ? "Drop the files here ..." : uploading ? `Uploading... ${uploadProgress}%` : "Drag & drop a file here, or click to select"}
+          {isDragActive ? "Drop the files here ..." : uploading ? "Uploading..." : "Drag & drop a file here, or click to select"}
         </p>
         {uploading && (
           <div className="w-full mt-4">
