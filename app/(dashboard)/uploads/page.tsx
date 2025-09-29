@@ -8,6 +8,37 @@ import { ErrorPage } from '@/components/ErrorPage';
 
 
 
+// Simple runtime error boundary (client side) to surface errors instead of blank screen
+function RuntimeErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [err, setErr] = useState<Error | null>(null);
+  useEffect(() => {
+    const handler = (event: ErrorEvent) => {
+      setErr(event.error || new Error(event.message));
+    };
+    window.addEventListener('error', handler);
+    return () => window.removeEventListener('error', handler);
+  }, []);
+  if (err) {
+    return (
+      <div className="p-6 text-red-600 font-mono text-sm space-y-2">
+        <h2 className="font-bold">Client Runtime Error</h2>
+        <pre className="whitespace-pre-wrap break-all">{err.message}</pre>
+        {err.stack && (
+          <details open>
+            <summary className="cursor-pointer mb-1">Stack trace</summary>
+            <pre className="whitespace-pre-wrap break-all max-h-64 overflow-auto">{err.stack}</pre>
+          </details>
+        )}
+        <button
+          onClick={() => location.reload()}
+          className="px-3 py-1 rounded bg-red-500 text-white text-xs"
+        >Reload</button>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
   // videoFile: { fileName, signedUrl, folder?, fullPath? } | null
@@ -179,6 +210,7 @@ export default function Uploads() {
   const videoUrl = videoFile ? videoFile.signedUrl : null;
 
   return (
+    <RuntimeErrorBoundary>
     <div className="py-8">
       {apiError ? (
         <ErrorPage
@@ -276,6 +308,7 @@ export default function Uploads() {
         </div>
       )}
     </div>
+    </RuntimeErrorBoundary>
   );
 
 }
@@ -289,34 +322,159 @@ function GCSVideoUploader({ onUploadCompleteAction }: VideoUploaderProps) {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  // XMLHttpRequest upload with progress tracking
+  const uploadWithXHR = async (signedUrl: string, file: File, startTime: number): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      // Track upload progress
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentCompleted = Math.round((event.loaded / event.total) * 100);
+          console.log(`Upload progress: ${percentCompleted}% (${event.loaded}/${event.total} bytes)`);
+          setUploadProgress(percentCompleted);
+        }
+      };
+      
+      // Handle completion
+      xhr.onload = () => {
+        const endTime = Date.now();
+        console.log(`PUT request completed in ${endTime - startTime}ms`);
+        console.log('Response status:', xhr.status);
+        console.log('Response statusText:', xhr.statusText);
+        
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          console.error('GCS error response:', xhr.responseText);
+          reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
+        }
+      };
+      
+      // Handle errors
+      xhr.onerror = () => {
+        reject(new Error('Network error during upload'));
+      };
+      
+      // Handle timeout
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 5 minutes'));
+      };
+      
+      // Configure request
+      xhr.open('PUT', signedUrl);
+      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.timeout = 300000; // 5 minutes
+      
+      // Start upload
+      console.log('Starting XMLHttpRequest upload...');
+      xhr.send(file);
+    });
+  };
+  
+  // Fetch upload for Safari large files (no progress tracking but more stable)
+  const uploadWithFetch = async (signedUrl: string, file: File, startTime: number): Promise<void> => {
+    console.log('Using fetch upload (Safari large file mode)...');
+    
+    // Simulate progress for large files in Safari
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev < 90) return prev + Math.random() * 10;
+        return prev;
+      });
+    }, 2000);
+    
+    try {
+      const response = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+      
+      clearInterval(progressInterval);
+      
+      const endTime = Date.now();
+      console.log(`PUT request completed in ${endTime - startTime}ms`);
+      console.log('Response status:', response.status);
+      console.log('Response statusText:', response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('GCS error response body:', errorText);
+        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      throw error;
+    }
+  };
+
   // Upload logic
   const uploadFile = async (file: File) => {
     setUploading(true);
     setUploadProgress(0);
+    
+    // Check if Safari and file is large
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isLargeFile = file.size > 100 * 1024 * 1024; // 100MB
+    
+    console.log('=== CLIENT UPLOAD START ===');
+    console.log('Browser:', isSafari ? 'Safari' : 'Other');
+    console.log('File details:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      isLarge: isLargeFile,
+      lastModified: new Date(file.lastModified).toISOString()
+    });
+    
     try {
+      console.log('Requesting signed URL...');
       const { data } = await axios.post('/api/gcs/upload_video', {
         fileName: file.name,
         contentType: file.type,
       });
+      
+      console.log('Signed URL response received:', data);
+      
       const { signedUrl } = data;
-      await axios.put(signedUrl, file, {
-        headers: {
-          'Content-Type': file.type,
-        },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(percentCompleted);
-          }
-        },
-      });
+      if (!signedUrl) {
+        throw new Error('No signed URL received from server');
+      }
+      
+      console.log('Full signed URL:', signedUrl);
+      console.log('URL hostname:', new URL(signedUrl).hostname);
+      console.log('URL pathname:', new URL(signedUrl).pathname);
+      
+      console.log('Starting PUT request to GCS...');
+      console.log('Request headers will be:', { 'Content-Type': file.type });
+      
+      const startTime = Date.now();
+      
+      // Use different upload strategy for Safari with large files
+      if (isSafari && isLargeFile) {
+        console.log('Using Safari-optimized upload strategy...');
+        await uploadWithFetch(signedUrl, file, startTime);
+      } else {
+        console.log('Using XMLHttpRequest upload strategy...');
+        await uploadWithXHR(signedUrl, file, startTime);
+      }
+      
+      console.log('=== UPLOAD SUCCESS ===');
       setSelectedFileName(null);
-      setUploadProgress(0);
+      setUploadProgress(100);
       // After upload, refetch video list and use signedUrl
       onUploadCompleteAction();
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Upload failed. Check console.');
+    } catch (error: any) {
+      console.error('=== UPLOAD ERROR ===');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Full error object:', error);
+      alert(`Upload failed: ${error.message || 'Check console for details'}`);
       setUploadProgress(0);
     } finally {
       setUploading(false);

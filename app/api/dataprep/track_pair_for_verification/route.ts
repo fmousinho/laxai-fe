@@ -13,6 +13,12 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
   
   for (const prefix of prefixes) {
     try {
+      // Security: Only process prefixes from process directories
+      if (!prefix.includes('/process/')) {
+        console.warn(`Skipping non-process directory prefix: ${prefix}`);
+        continue;
+      }
+      
       // Remove gs:// prefix and split bucket/path
       const prefixWithoutGs = prefix.replace('gs://', '');
       const [bucketName, ...pathParts] = prefixWithoutGs.split('/');
@@ -21,18 +27,21 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
       console.log(`Listing files in gs://${bucketName}/${prefixPath}`);
       
       const [files] = await storage.bucket(bucketName).getFiles({
-        prefix: prefixPath,
-        // Only get image files
-        matchGlob: '**/*.{jpg,jpeg,png,gif,webp}'
+        prefix: prefixPath
       });
       
-      // Convert to public URLs
-      const urls = files.map((file: any) => {
-        return `https://storage.googleapis.com/${bucketName}/${file.name}`;
-      });
+      // Filter for MP4 video files and convert to public URLs
+      const urls = files
+        .filter((file: any) => {
+          const fileName = file.name.toLowerCase();
+          return fileName.endsWith('.mp4');
+        })
+        .map((file: any) => {
+          return `https://storage.googleapis.com/${bucketName}/${file.name}`;
+        });
       
       allUrls.push(...urls);
-      console.log(`Found ${urls.length} images in ${prefix}`);
+      console.log(`Found ${urls.length} videos in ${prefix}`);
       
     } catch (error) {
       console.error(`Error listing files for prefix ${prefix}:`, error);
