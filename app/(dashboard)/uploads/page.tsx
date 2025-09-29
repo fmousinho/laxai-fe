@@ -169,27 +169,91 @@ export default function Uploads() {
     checkExistingFiles();
   }, []);
 
-  const handleUploadComplete = (signedUrl: string, fileName: string) => {
-    // After upload, set video file and transition to preparing state
-    setUploadState(prev => ({
-      ...prev,
-      type: 'preparing',
-      videoFile: {
-        fileName,
-        signedUrl,
-        fullPath: signedUrl
+  const handleUploadComplete = async (uploadSignedUrl: string, fileName: string) => {
+    console.log('handleUploadComplete called with:', { uploadSignedUrl, fileName });
+    
+    try {
+      // Get a read signed URL for the uploaded file
+      console.log('Getting read signed URL for file:', fileName);
+      const { data: listData } = await axios.get('/api/gcs/list_video');
+      
+      // Find the uploaded file in the list
+      const uploadedFile = listData.files?.find((file: VideoFile) => 
+        file.fileName === fileName || file.fullPath?.endsWith(fileName)
+      );
+      
+      if (!uploadedFile || !uploadedFile.signedUrl) {
+        console.error('Could not find uploaded file in list or missing signed URL');
+        setUploadState(prev => ({
+          ...prev,
+          type: 'failed_upload',
+          error: 'Failed to get video URL after upload'
+        }));
+        return;
       }
-    }));
-
-    // After a brief delay, transition to ready state
-    setTimeout(() => {
-      setUploadState(prev => {
-        if (prev.type === 'preparing') {
-          return { ...prev, type: 'ready' };
+      
+      const readSignedUrl = uploadedFile.signedUrl;
+      console.log('Got read signed URL:', readSignedUrl);
+    
+      // After upload, set video file and transition to preparing state
+      setUploadState(prev => ({
+        ...prev,
+        type: 'preparing',
+        videoFile: {
+          fileName,
+          signedUrl: readSignedUrl,
+          fullPath: uploadedFile.fullPath || fileName
         }
-        return prev;
-      });
-    }, 2000);
+      }));
+
+      // Wait for the video to be actually accessible before transitioning to ready
+      const checkVideoReady = async (): Promise<boolean> => {
+        try {
+          const response = await fetch(readSignedUrl, { method: 'HEAD' });
+          return response.ok;
+        } catch (error) {
+          return false;
+        }
+      };
+
+      // Poll every 500ms until video is ready, with a maximum of 10 seconds
+      const maxAttempts = 20;
+      let attempts = 0;
+
+      const pollForVideo = async (): Promise<void> => {
+        attempts++;
+        const isReady = await checkVideoReady();
+
+        if (isReady) {
+          setUploadState(prev => {
+            if (prev.type === 'preparing') {
+              return { ...prev, type: 'ready' };
+            }
+            return prev;
+          });
+        } else if (attempts < maxAttempts) {
+          setTimeout(pollForVideo, 500);
+        } else {
+          // If video is still not ready after 10 seconds, transition anyway
+          setUploadState(prev => {
+            if (prev.type === 'preparing') {
+              return { ...prev, type: 'ready' };
+            }
+            return prev;
+          });
+        }
+      };
+
+      // Start polling
+      setTimeout(pollForVideo, 500);
+    } catch (error) {
+      console.error('Error in handleUploadComplete:', error);
+      setUploadState(prev => ({
+        ...prev,
+        type: 'failed_upload',
+        error: 'Failed to process uploaded video'
+      }));
+    }
   };
 
   const handleDelete = async () => {
@@ -203,12 +267,16 @@ export default function Uploads() {
       
       // Check if there are other files
       const { data } = await axios.get('/api/gcs/list_video');
-      if (data.files && data.files.length > 0) {
-        setUploadState(prev => ({
-          ...prev,
+      // Filter out the deleted file in case the API returns stale data
+      const remainingFiles = (data.files || []).filter((file: VideoFile) => 
+        (file.fullPath || file.fileName) !== filePath
+      );
+      
+      if (remainingFiles.length > 0) {
+        setUploadState({
           type: 'ready',
-          videoFile: data.files[0]
-        }));
+          videoFile: remainingFiles[0]
+        });
       } else {
         setUploadState({ type: 'initial' });
       }
@@ -281,24 +349,31 @@ export default function Uploads() {
         />;
 
       case 'preparing':
-        return (
-          <div className="text-center text-muted-foreground">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
-            <p>Preparing file...</p>
-          </div>
-        );
+        return <GCSVideoUploader 
+          onUploadCompleteAction={handleUploadComplete} 
+          onUploadStart={() => setUploadState(prev => ({ ...prev, type: 'uploading' }))}
+          onUploadError={(error) => setUploadState(prev => ({ ...prev, type: 'failed_upload', error }))}
+          isPreparing={true}
+        />;
 
       case 'ready':
         return (
           <div className="mt-6 text-center flex flex-col items-center gap-4">
             <p className="mb-2 text-lg font-medium">Video uploaded!</p>
-            <video
-              src={videoUrl!}
-              controls
-              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
-              style={{ maxWidth: 400 }}
-              onClick={() => setShowModal(true)}
-            />
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                controls
+                className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+                style={{ maxWidth: 400 }}
+                onClick={() => setShowModal(true)}
+                onError={(e) => console.error('Video load error:', e)}
+                onLoadStart={() => console.log('Video load started')}
+                onLoadedData={() => console.log('Video data loaded')}
+              />
+            ) : (
+              <div className="text-red-500">Video URL not available</div>
+            )}
             {showModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
                 <div className="relative" onClick={e => e.stopPropagation()}>
@@ -505,9 +580,10 @@ type VideoUploaderProps = {
   onUploadCompleteAction: (signedUrl: string, fileName: string) => void;
   onUploadStart?: () => void;
   onUploadError?: (error: string) => void;
+  isPreparing?: boolean;
 };
 
-function GCSVideoUploader({ onUploadCompleteAction, onUploadStart, onUploadError }: VideoUploaderProps) {
+function GCSVideoUploader({ onUploadCompleteAction, onUploadStart, onUploadError, isPreparing }: VideoUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -694,11 +770,11 @@ function GCSVideoUploader({ onUploadCompleteAction, onUploadStart, onUploadError
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'video/mp4': ['.mp4'] }, multiple: false, disabled: uploading });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'video/mp4': ['.mp4'] }, multiple: false, disabled: uploading || isPreparing });
 
   return (
     <div
-      className={`max-w-lg mx-auto mt-16 p-8 border-2 border-dashed rounded-2xl text-center bg-card text-card-foreground shadow-lg font-sans cursor-pointer transition-colors ${uploading ? 'opacity-60 pointer-events-none' : 'hover:bg-primary/10'}`}
+      className={`max-w-lg mx-auto mt-16 p-8 border-2 border-dashed rounded-2xl text-center bg-card text-card-foreground shadow-lg font-sans cursor-pointer transition-colors ${uploading || isPreparing ? 'opacity-60 pointer-events-none' : 'hover:bg-primary/10'}`}
       tabIndex={0}
       {...getRootProps()}
     >
@@ -725,17 +801,17 @@ function GCSVideoUploader({ onUploadCompleteAction, onUploadStart, onUploadError
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <p className="text-lg font-medium mb-2">
-          {isDragActive ? "Drop the files here ..." : uploading ? "Uploading..." : "Drag & drop a file here, or click to select"}
+          {isDragActive ? "Drop the files here ..." : uploading ? "Uploading..." : isPreparing ? "Preparing video..." : "Drag & drop a file here, or click to select"}
         </p>
-        {uploading && (
+        {(uploading || isPreparing) && (
           <div className="w-full mt-4">
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
                 className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${uploadProgress}%` }}
+                style={{ width: `${isPreparing ? 100 : uploadProgress}%` }}
               ></div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{uploadProgress}% complete</p>
+            <p className="text-xs text-muted-foreground mt-1">{isPreparing ? '' : `${uploadProgress}% complete`}</p>
           </div>
         )}
         {selectedFileName && (
