@@ -20,15 +20,16 @@ export async function GET(
 
     const { task_id } = await params;
 
-    // For SSE streaming, we'll use fetch with proper authentication
+    // For SSE streaming, authenticate with Google Cloud Run
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
-    // Get the ID token for the request
-    const tokenResponse = await client.getAccessToken();
-    const token = tokenResponse.token;
+    // Get the authorization header for the progress stream endpoint
+    const progressStreamUrl = `${BACKEND_URL}/api/v1/track/${task_id}/progress/stream`;
+    const requestHeaders = await auth.getRequestHeaders(progressStreamUrl);
+    const authHeader = requestHeaders.get('Authorization');
 
-    if (!token) {
+    if (!authHeader) {
       return new NextResponse('Authentication failed', { status: 401 });
     }
 
@@ -41,7 +42,7 @@ export async function GET(
             // Make authenticated request to backend SSE endpoint
             const response = await fetch(`${BACKEND_URL}/api/v1/track/${task_id}/progress/stream?tenant_id=${tenantId}`, {
               headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': authHeader,
                 'Accept': 'text/event-stream',
                 'Cache-Control': 'no-cache',
               },
