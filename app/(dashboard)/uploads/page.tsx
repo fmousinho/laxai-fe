@@ -101,21 +101,48 @@ export default function Uploads() {
     }
   }, [uploadState]);
 
+  const [eventSource, setEventSource] = useState<EventSource | null>(null);
+
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
+
+  // Cleanup EventSource on unmount or state change
+  useEffect(() => {
+    return () => {
+      if (eventSource) {
+        console.log('Cleaning up EventSource');
+        eventSource.close();
+      }
+    };
+  }, [eventSource]);
+
+  // Cleanup EventSource when analysis completes or fails
+  useEffect(() => {
+    if (uploadState.type === 'analysis_complete' || uploadState.type === 'failed_analysis') {
+      if (eventSource) {
+        console.log('Closing EventSource after analysis completion/failure');
+        eventSource.close();
+        setEventSource(null);
+      }
+    }
+  }, [uploadState.type, eventSource]);
 
   // Function to start streaming progress updates
   const startProgressStream = (taskId: string) => {
-    const eventSource = new EventSource(`/api/track/${taskId}/progress/stream`);
+    console.log('Starting progress stream for task:', taskId);
+    const newEventSource = new EventSource(`/api/track/${taskId}/progress/stream`);
+    setEventSource(newEventSource);
 
-    eventSource.onmessage = (event) => {
-      console.log('Raw event data:', event.data);
+    newEventSource.onmessage = (event) => {
+      console.log('SSE Message received:', event.data);
       try {
         const data = JSON.parse(event.data);
-        
+        console.log('Parsed SSE data:', data);
+
         // Handle different status types
         setUploadState(prev => {
+          console.log('Updating state with SSE data, current type:', prev.type);
           let message = '';
-          
+
           // Create more descriptive messages based on the data
           if (data.status === 'processing' && data.progress_percent !== undefined) {
             const progress = Math.round(data.progress_percent);
@@ -139,13 +166,15 @@ export default function Uploads() {
           } else {
             message = 'Analysis update received';
           }
-          
+
           const newProgress = [...(prev.analysisProgress || []), {
             message,
             timestamp: new Date().toLocaleTimeString(),
             type: data.status || 'info'
           }];
-          
+
+          console.log('New progress item:', { message, type: data.status });
+
           switch (data.status) {
             case 'waiting':
             case 'started':
@@ -161,7 +190,7 @@ export default function Uploads() {
         });
       } catch (error) {
         console.error('Error parsing progress data:', error, 'Raw data:', event.data);
-        
+
         // Try to extract useful information from the raw data
         let errorMessage = 'Error parsing update';
         if (event.data.includes('JSON serializable')) {
@@ -169,7 +198,7 @@ export default function Uploads() {
         } else if (event.data.includes('error')) {
           errorMessage = 'Analysis error occurred';
         }
-        
+
         setUploadState(prev => ({
           ...prev,
           analysisProgress: [...(prev.analysisProgress || []), {
@@ -181,7 +210,7 @@ export default function Uploads() {
       }
     };
 
-    eventSource.onerror = (error) => {
+    newEventSource.onerror = (error) => {
       console.error('EventSource error:', error);
       setUploadState(prev => ({
         ...prev,
@@ -192,11 +221,12 @@ export default function Uploads() {
           type: 'error'
         }]
       }));
-      eventSource.close();
+      newEventSource.close();
+      setEventSource(null);
     };
 
     // Store eventSource for cleanup if needed
-    return eventSource;
+    return newEventSource;
   };
 
   // On mount, check for existing files (only if no saved state)
