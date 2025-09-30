@@ -26,12 +26,18 @@ interface VideoFile {
   created?: string;
 }
 
+interface AnalysisProgressItem {
+  message: string;
+  timestamp: string;
+  type: string;
+}
+
 interface UploadState {
   type: UploadStateType;
   videoFile?: VideoFile;
   uploadProgress?: number;
   analysisTaskId?: string;
-  analysisProgress?: string[];
+  analysisProgress?: AnalysisProgressItem[];
   error?: string;
 }
 
@@ -108,11 +114,32 @@ export default function Uploads() {
         
         // Handle different status types
         setUploadState(prev => {
-          const newProgress = [...(prev.analysisProgress || []), 
-            data.status === 'processing' 
-              ? `Processing: ${Math.round(data.progress)}% complete`
-              : data.message || data.status || 'Update received'
-          ];
+          let message = '';
+          
+          // Create more descriptive messages based on the data
+          if (data.status === 'processing' && data.progress !== undefined) {
+            message = `Processing: ${Math.round(data.progress)}% complete`;
+          } else if (data.status === 'waiting') {
+            message = 'Queued for analysis';
+          } else if (data.status === 'started') {
+            message = 'Analysis started';
+          } else if (data.status === 'completed') {
+            message = 'Analysis completed successfully';
+          } else if (data.status === 'failed') {
+            message = data.message || 'Analysis failed';
+          } else if (data.message) {
+            message = data.message;
+          } else if (data.status) {
+            message = `Status: ${data.status}`;
+          } else {
+            message = 'Analysis update received';
+          }
+          
+          const newProgress = [...(prev.analysisProgress || []), {
+            message,
+            timestamp: new Date().toLocaleTimeString(),
+            type: data.status || 'info'
+          }];
           
           switch (data.status) {
             case 'waiting':
@@ -140,7 +167,11 @@ export default function Uploads() {
         
         setUploadState(prev => ({
           ...prev,
-          analysisProgress: [...(prev.analysisProgress || []), errorMessage]
+          analysisProgress: [...(prev.analysisProgress || []), {
+            message: errorMessage,
+            timestamp: new Date().toISOString(),
+            type: 'error'
+          }]
         }));
       }
     };
@@ -150,7 +181,11 @@ export default function Uploads() {
       setUploadState(prev => ({
         ...prev,
         type: 'failed_analysis',
-        analysisProgress: [...(prev.analysisProgress || []), 'Connection error - retrying...']
+        analysisProgress: [...(prev.analysisProgress || []), {
+          message: 'Connection error - retrying...',
+          timestamp: new Date().toISOString(),
+          type: 'error'
+        }]
       }));
       eventSource.close();
     };
@@ -483,18 +518,88 @@ export default function Uploads() {
             )}
             <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-              <h3 className="font-semibold text-blue-800 mb-2">Video Analysis in Progress</h3>
-              <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto text-sm">
-                {uploadState.analysisProgress?.length === 0 ? (
-                  <p className="text-gray-500">Connecting to analysis stream...</p>
-                ) : (
-                  uploadState.analysisProgress?.map((message, index) => (
-                    <p key={index} className="mb-1 text-gray-700">{message}</p>
-                  ))
+              <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                Video Analysis in Progress
+              </h3>
+
+              {/* Current Status */}
+              <div className="mb-3 p-2 bg-white rounded border">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="font-medium text-gray-700">Status:</span>
+                  <span className="text-blue-600 capitalize">
+                    {uploadState.analysisProgress?.[uploadState.analysisProgress.length - 1]?.message || 'Connecting...'}
+                  </span>
+                </div>
+
+                {/* Progress Bar for processing status */}
+                {uploadState.analysisProgress?.some(msg => msg.message.includes('Processing:')) && (
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: (() => {
+                          const latestProcessing = uploadState.analysisProgress
+                            ?.filter(msg => msg.message.includes('Processing:'))
+                            ?.pop();
+                          const match = latestProcessing?.message.match(/(\d+)%/);
+                          const progress = match ? parseInt(match[1], 10) : 0;
+                          return `${Math.min(100, Math.max(0, progress))}%`;
+                        })()
+                      }}
+                    ></div>
+                  </div>
                 )}
               </div>
+
+              {/* Progress Messages */}
+              <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto">
+                <div className="space-y-2">
+                  {uploadState.analysisProgress?.length === 0 ? (
+                    <div className="flex items-center gap-2 text-gray-500 text-sm">
+                      <div className="animate-pulse w-2 h-2 bg-gray-400 rounded-full"></div>
+                      Connecting to analysis stream...
+                    </div>
+                  ) : (
+                    uploadState.analysisProgress?.slice(-5).map((message, index) => {
+                      // Determine message type and styling
+                      const isProcessing = message.message.includes('Processing:');
+                      const isError = message.message.includes('error') || message.message.includes('Error') || message.message.includes('failed');
+                      const isComplete = message.message.includes('completed') || message.message.includes('finished');
+
+                      let icon = '📝';
+                      let bgColor = 'bg-gray-50';
+                      let textColor = 'text-gray-700';
+
+                      if (isProcessing) {
+                        icon = '⚡';
+                        bgColor = 'bg-blue-50';
+                        textColor = 'text-blue-700';
+                      } else if (isError) {
+                        icon = '❌';
+                        bgColor = 'bg-red-50';
+                        textColor = 'text-red-700';
+                      } else if (isComplete) {
+                        icon = '✅';
+                        bgColor = 'bg-green-50';
+                        textColor = 'text-green-700';
+                      }
+
+                      return (
+                        <div key={index} className={`flex items-start gap-2 p-2 rounded text-sm ${bgColor}`}>
+                          <span className="text-xs mt-0.5">{icon}</span>
+                          <span className={textColor}>{message.message}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
               {uploadState.analysisTaskId && (
-                <p className="text-xs text-blue-600 mt-2">Task ID: {uploadState.analysisTaskId}</p>
+                <div className="mt-3 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                  <strong>Task ID:</strong> {uploadState.analysisTaskId}
+                </div>
               )}
             </div>
           </div>
