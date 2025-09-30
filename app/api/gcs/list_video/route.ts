@@ -54,14 +54,17 @@ export async function GET(req: NextRequest) {
         action: 'read',
         expires: Date.now() + 10 * 60 * 1000, // 10 min expiry
       });
-      
-      // Extract relative path within the folder
-      const relativePath = f.name.replace(prefix, '');
-      
+
+            // Extract just the filename (everything after the last /)
+      const fileName = f.name.split('/').pop() || '';
+
+      // Get the folder path (everything except the filename)
+      const rightFolder = f.name.replace(fileName, '');
+
       return {
-        fileName: relativePath,
-        signedUrl,
-        folder,
+        fileName: fileName,
+        signedUrl: signedUrl,
+        folder: rightFolder,
         fullPath: f.name
       };
     }));
