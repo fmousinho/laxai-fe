@@ -159,8 +159,24 @@ export default function Uploads() {
     return eventSource;
   };
 
-  // On mount, check for existing files
+  // On mount, check for existing files (only if no saved state)
   useEffect(() => {
+    // If we have a saved state from sessionStorage, don't check files
+    const savedState = typeof window !== 'undefined' ? sessionStorage.getItem('uploadState') : null;
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed && parsed.type) {
+          console.log('Using saved state:', parsed.type);
+          setHasCheckedExistingFiles(true);
+          return; // Don't check files if we have saved state
+        }
+      } catch (e) {
+        console.warn('Failed to parse saved state, will check files:', e);
+      }
+    }
+
+    // No saved state, check for existing files
     const checkExistingFiles = async () => {
       try {
         const { data } = await axios.get('/api/gcs/list_video?folder=raw');
@@ -170,14 +186,24 @@ export default function Uploads() {
             type: 'ready',
             videoFile: data.files[0]
           }));
+        } else {
+          setUploadState(prev => ({
+            ...prev,
+            type: 'initial'
+          }));
         }
       } catch (err) {
         console.warn('Failed to check for existing files:', err);
         // Don't set error state, just stay in initial state
+        setUploadState(prev => ({
+          ...prev,
+          type: 'initial'
+        }));
       } finally {
         setHasCheckedExistingFiles(true);
       }
     };
+    
     checkExistingFiles();
   }, []);
 
