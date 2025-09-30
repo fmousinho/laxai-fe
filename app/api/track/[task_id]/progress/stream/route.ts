@@ -65,11 +65,41 @@ export async function GET(
               const { done, value } = await reader.read();
               if (done) break;
 
-              // Convert Uint8Array to string for logging
+              // Convert Uint8Array to string for processing
               const chunk = new TextDecoder().decode(value);
               console.log(`SSE chunk for task ${task_id}:`, chunk);
 
-              controller.enqueue(value);
+              // Try to sanitize the chunk if it contains JSON that might have serialization issues
+              let sanitizedChunk = chunk;
+              try {
+                // If this is a data line with JSON, try to parse and re-serialize it
+                if (chunk.startsWith('data: ')) {
+                  const jsonStr = chunk.substring(6); // Remove 'data: ' prefix
+                  
+                  // Check if this contains DatetimeWithNanoseconds error before parsing
+                  if (jsonStr.includes('DatetimeWithNanoseconds') && jsonStr.includes('not JSON serializable')) {
+                    console.warn(`Backend serialization error detected for task ${task_id}, sending sanitized error`);
+                    sanitizedChunk = 'data: {"status": "failed", "message": "Analysis failed due to backend serialization error"}\n\n';
+                  } else {
+                    const parsed = JSON.parse(jsonStr);
+                    
+                    // Re-serialize to ensure it's valid JSON
+                    const sanitizedJson = JSON.stringify(parsed);
+                    sanitizedChunk = `data: ${sanitizedJson}`;
+                  }
+                }
+              } catch (parseError) {
+                // If parsing fails, check if it's a known serialization error
+                if (chunk.includes('DatetimeWithNanoseconds') && chunk.includes('not JSON serializable')) {
+                  console.warn(`Backend serialization error for task ${task_id}, sending sanitized error`);
+                  sanitizedChunk = 'data: {"status": "failed", "message": "Analysis failed due to backend serialization error"}\n\n';
+                } else {
+                  console.warn(`Failed to sanitize SSE chunk for task ${task_id}:`, parseError);
+                  // Keep original chunk if we can't sanitize it
+                }
+              }
+
+              controller.enqueue(new TextEncoder().encode(sanitizedChunk));
             }
 
             controller.close();

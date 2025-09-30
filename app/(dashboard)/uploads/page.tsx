@@ -70,6 +70,7 @@ function RuntimeErrorBoundary({ children }: { children: React.ReactNode }) {
 
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
+  const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(false);
   
   // Unified state management with persistence
   const [uploadState, setUploadState] = useState<UploadState>(() => {
@@ -127,10 +128,19 @@ export default function Uploads() {
           }
         });
       } catch (error) {
-        console.error('Error parsing progress data:', error);
+        console.error('Error parsing progress data:', error, 'Raw data:', event.data);
+        
+        // Try to extract useful information from the raw data
+        let errorMessage = 'Error parsing update';
+        if (event.data.includes('JSON serializable')) {
+          errorMessage = 'Backend serialization error - analysis may have failed';
+        } else if (event.data.includes('error')) {
+          errorMessage = 'Analysis error occurred';
+        }
+        
         setUploadState(prev => ({
           ...prev,
-          analysisProgress: [...(prev.analysisProgress || []), 'Error parsing update']
+          analysisProgress: [...(prev.analysisProgress || []), errorMessage]
         }));
       }
     };
@@ -164,6 +174,8 @@ export default function Uploads() {
       } catch (err) {
         console.warn('Failed to check for existing files:', err);
         // Don't set error state, just stay in initial state
+      } finally {
+        setHasCheckedExistingFiles(true);
       }
     };
     checkExistingFiles();
@@ -561,7 +573,12 @@ export default function Uploads() {
   return (
     <RuntimeErrorBoundary>
     <div className="py-8">
-      {apiError ? (
+      {!hasCheckedExistingFiles ? (
+        <div className="text-center text-muted-foreground">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+          <p>Loading...</p>
+        </div>
+      ) : apiError ? (
         <ErrorPage
           error={apiError}
           onRetry={clearError}
