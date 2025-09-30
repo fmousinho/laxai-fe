@@ -117,8 +117,13 @@ export default function Uploads() {
           let message = '';
           
           // Create more descriptive messages based on the data
-          if (data.status === 'processing' && data.progress !== undefined) {
-            message = `Processing: ${Math.round(data.progress)}% complete`;
+          if (data.status === 'processing' && data.progress_percent !== undefined) {
+            const progress = Math.round(data.progress_percent);
+            const framesInfo = data.frames_processed && data.total_frames ?
+              ` (${data.frames_processed}/${data.total_frames} frames)` : '';
+            const detectionsInfo = data.detections_count ?
+              ` - ${data.detections_count} detections` : '';
+            message = `Processing: ${progress}% complete${framesInfo}${detectionsInfo}`;
           } else if (data.status === 'waiting') {
             message = 'Queued for analysis';
           } else if (data.status === 'started') {
