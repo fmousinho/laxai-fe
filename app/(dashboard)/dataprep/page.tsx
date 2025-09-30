@@ -52,7 +52,7 @@ export default function DataPrepPage() {
 		const fetchVideos = async () => {
 			setLoadingVideos(true);
 			try {
-				const { data } = await axios.get('/api/gcs/list_video');
+				const { data } = await axios.get('/api/gcs/list_video?folder=imported');
 				console.log('GCS list_video response:', data);
 				setVideos(data.files || []);
 			} catch (err) {

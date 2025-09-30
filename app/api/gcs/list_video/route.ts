@@ -17,24 +17,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
   }
   
-  // Check both raw/ and process/ folders
-  const prefixes = [`${tenantId}/raw/`, `${tenantId}/process/`];
-  const cacheKey = `${tenantId}-videos`;
+  // Get folder parameter from query string, default to 'raw' for backward compatibility
+  const url = new URL(req.url);
+  const folder = url.searchParams.get('folder') || 'raw';
+  
+  // Validate folder parameter
+  const allowedFolders = ['raw', 'process', 'imported'];
+  if (!allowedFolders.includes(folder)) {
+    return NextResponse.json({ error: 'Invalid folder parameter' }, { status: 400 });
+  }
+  let prefix
+  if (folder=='imported') {
+    prefix = `${tenantId}/process/`;
+  } else {
+    prefix = `${tenantId}/${folder}/`;
+  }
+
+  const cacheKey = `${tenantId}-${folder}-videos`;
   
   if (cachedMp4 && Date.now() - cachedMp4.ts < CACHE_TTL && cachedMp4.prefix === cacheKey) {
     return NextResponse.json({ files: cachedMp4.files, cached: true });
   }
   
   try {
-    // Get files from both folders
-    const allFiles = [];
-    for (const prefix of prefixes) {
-      const [files] = await storage.bucket(bucketName!).getFiles({ prefix });
-      allFiles.push(...files);
-    }
+    // Get files from specified folder
+    const [files] = await storage.bucket(bucketName!).getFiles({ prefix });
     
     // Only .mp4 files, not folders
-    const mp4Files = allFiles
+    const mp4Files = files
       .filter(f => f.name.endsWith('.mp4') && !f.name.endsWith('/'));
     
     // Generate signed URLs for each file
@@ -45,18 +55,13 @@ export async function GET(req: NextRequest) {
         expires: Date.now() + 10 * 60 * 1000, // 10 min expiry
       });
       
-      // Determine which folder the file is in and extract relative path
-      let relativePath = '';
-      if (f.name.startsWith(`${tenantId}/raw/`)) {
-        relativePath = f.name.replace(`${tenantId}/raw/`, '');
-      } else if (f.name.startsWith(`${tenantId}/process/`)) {
-        relativePath = f.name.replace(`${tenantId}/process/`, '');
-      }
+      // Extract relative path within the folder
+      const relativePath = f.name.replace(prefix, '');
       
       return {
         fileName: relativePath,
         signedUrl,
-        folder: f.name.startsWith(`${tenantId}/process/`) ? 'process' : 'raw',
+        folder,
         fullPath: f.name
       };
     }));

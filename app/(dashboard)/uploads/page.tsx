@@ -163,7 +163,7 @@ export default function Uploads() {
   useEffect(() => {
     const checkExistingFiles = async () => {
       try {
-        const { data } = await axios.get('/api/gcs/list_video');
+        const { data } = await axios.get('/api/gcs/list_video?folder=raw');
         if (data.files && data.files.length > 0) {
           setUploadState(prev => ({
             ...prev,
@@ -187,7 +187,7 @@ export default function Uploads() {
     try {
       // Get a read signed URL for the uploaded file
       console.log('Getting read signed URL for file:', fileName);
-      const { data: listData } = await axios.get('/api/gcs/list_video');
+      const { data: listData } = await axios.get('/api/gcs/list_video?folder=raw');
       
       // Find the uploaded file in the list
       const uploadedFile = listData.files?.find((file: VideoFile) => 
@@ -278,7 +278,7 @@ export default function Uploads() {
       await axios.delete('/api/gcs/delete_video', { data: { fileName: filePath } });
       
       // Check if there are other files
-      const { data } = await axios.get('/api/gcs/list_video');
+      const { data } = await axios.get('/api/gcs/list_video?folder=raw');
       // Filter out the deleted file in case the API returns stale data
       const remainingFiles = (data.files || []).filter((file: VideoFile) => 
         (file.fullPath || file.fileName) !== filePath
