@@ -396,42 +396,11 @@ export default function Uploads() {
 
       case 'analysing':
         return (
-          <div className="mt-6 text-center flex flex-col items-center gap-4">
-            <p className="mb-2 text-lg font-medium">Video uploaded!</p>
-            <video
-              src={videoUrl!}
-              controls
-              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
-              style={{ maxWidth: 400 }}
-              onClick={() => setShowModal(true)}
-            />
-            {showModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
-                <div className="relative" onClick={e => e.stopPropagation()}>
-                  <video
-                    src={videoUrl!}
-                    controls
-                    autoPlay
-                    className="rounded-lg border bg-black shadow-2xl"
-                    style={{ maxWidth: '90vw', maxHeight: '80vh' }}
-                  />
-                  <button
-                    className="absolute top-2 right-2 text-white bg-black/60 rounded-full px-3 py-1 text-lg font-bold hover:bg-black/80"
-                    onClick={() => setShowModal(false)}
-                    aria-label="Close"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
-            <VideoAnalysisProgress
-              uploadState={uploadState}
-              setUploadState={setUploadState}
-              videoUrl={videoUrl}
-            />
-          </div>
+          <VideoAnalysisProgress
+            uploadState={uploadState}
+            setUploadState={setUploadState}
+            videoUrl={videoUrl}
+          />
         );
 
       case 'analysis_complete':

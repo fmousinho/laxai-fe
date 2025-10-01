@@ -190,7 +190,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
 
   return (
     <div className="mt-6 text-center flex flex-col items-center gap-4">
-      <p className="mb-2 text-lg font-medium">Video uploaded!</p>
+      <p className="mb-2 text-lg font-medium">Analysing Video</p>
       <video
         src={videoUrl!}
         controls
