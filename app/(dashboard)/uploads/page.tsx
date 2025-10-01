@@ -78,6 +78,7 @@ function RuntimeErrorBoundary({ children }: { children: React.ReactNode }) {
 export default function Uploads() {
   const [showModal, setShowModal] = useState(false);
   const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
   
   // Unified state management with persistence
   const [uploadState, setUploadState] = useState<UploadState>(() => {
@@ -514,7 +515,18 @@ export default function Uploads() {
           onDismiss={clearError}
         />
       ) : (
-        renderContent()
+        <>
+          {/* Demo Mode Toggle - Always visible */}
+          <div className="mb-4 flex justify-center">
+            <button
+              onClick={() => setDemoMode(!demoMode)}
+              className="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+            >
+              {demoMode ? '🔴 Disable Demo' : '🟢 Enable Demo Mode'}
+            </button>
+          </div>
+          {renderContent()}
+        </>
       )}
     </div>
     </RuntimeErrorBoundary>

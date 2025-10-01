@@ -101,6 +101,11 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
           const data = await response.json();
           console.log('Polled progress data:', data);
 
+          // Handle countdown separately to avoid setState during render
+          if (data.status === 'initializing' && countdown === null) {
+            setCountdown(180);
+          }
+
           // Handle different status types from polling response
           setUploadState(prev => {
             console.log('Updating state with polled data, current type:', prev.type);
@@ -109,15 +114,13 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             // Create messages based on the new status types
             if (data.status === 'initializing') {
               message = 'Proxy starting Cloud Run job';
-              // Start 3 minute countdown (180 seconds)
-              setCountdown(180);
             } else if (data.status === 'running') {
               const framesProcessed = data.frames_processed || 0;
               const totalFrames = data.total_frames || 0;
               message = `Processed ${framesProcessed} out of ${totalFrames} frames`;
             } else if (data.status === 'completed') {
               message = 'Analysis completed successfully';
-            } else if (data.status === 'cancelled') {
+            } else if (data.status === 'cancelled' || data.status === 'failed') {
               message = 'Analysis was cancelled';
             } else if (data.message) {
               message = data.message;
@@ -142,6 +145,8 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
               case 'completed':
                 return { ...prev, type: 'analysis_complete' as const, analysisProgress: newProgress };
               case 'cancelled':
+                return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
+              case 'failed':
                 return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
               default:
                 return { ...prev, analysisProgress: newProgress };
@@ -233,31 +238,50 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
         </h3>
 
         {/* Current Status */}
-        <div className="mb-3 p-2 bg-white rounded border">
+        <div className="mb-3 p-3 bg-white rounded border">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="font-medium text-gray-700">Status:</span>
-            <span className="text-blue-600 capitalize">
-              {uploadState.analysisProgress?.[uploadState.analysisProgress.length - 1]?.message || 'Connecting...'}
+            <span className="text-blue-600 capitalize flex items-center gap-2">
+              {(() => {
+                const latestMessage = uploadState.analysisProgress?.[uploadState.analysisProgress.length - 1];
+                const message = latestMessage?.message || 'Connecting...';
+                const type = latestMessage?.type || 'info';
+
+                // Add whimsical emojis based on status type
+                let emoji = '🔄';
+                if (type === 'initializing') emoji = '🚀';
+                else if (type === 'running') emoji = '⚡';
+                else if (type === 'completed') emoji = '🎉';
+                else if (type === 'error' || type === 'failed') emoji = '😵';
+                else if (type === 'cancelled') emoji = '🛑';
+
+                return (
+                  <>
+                    <span>{emoji}</span>
+                    <span>{message}</span>
+                  </>
+                );
+              })()}
             </span>
           </div>
 
           {/* Countdown Timer for initializing status */}
           {countdown !== null && (
-            <div className="flex items-center justify-between text-sm mb-2">
+            <div className="flex items-center justify-between text-sm mb-3">
               <span className="font-medium text-gray-700">Time remaining:</span>
-              <span className="text-orange-600 font-mono">
-                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              <span className="text-orange-600 font-mono text-lg">
+                ⏱️ {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
               </span>
             </div>
           )}
 
-          {/* Progress Bar for running status */}
+          {/* Enhanced Progress Bar for running status */}
           {uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: (() => {
+            <div className="w-full">
+              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                <span>Progress</span>
+                <span>
+                  {(() => {
                     const latestProcessing = uploadState.analysisProgress
                       ?.filter(msg => msg.message.includes('Processed'))
                       ?.pop();
@@ -266,59 +290,38 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
                       if (match) {
                         const processed = parseInt(match[1], 10);
                         const total = parseInt(match[2], 10);
-                        return total > 0 ? `${Math.min(100, Math.max(0, (processed / total) * 100))}%` : '0%';
+                        return `${Math.round((processed / total) * 100)}%`;
                       }
                     }
                     return '0%';
-                  })()
-                }}
-              ></div>
+                  })()}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
+                <div
+                  className="h-3 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600 transition-all duration-500 ease-out shadow-sm"
+                  style={{
+                    width: (() => {
+                      const latestProcessing = uploadState.analysisProgress
+                        ?.filter(msg => msg.message.includes('Processed'))
+                        ?.pop();
+                      if (latestProcessing) {
+                        const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
+                        if (match) {
+                          const processed = parseInt(match[1], 10);
+                          const total = parseInt(match[2], 10);
+                          return total > 0 ? `${Math.min(100, Math.max(0, (processed / total) * 100))}%` : '0%';
+                        }
+                      }
+                      return '0%';
+                    })()
+                  }}
+                >
+                  <div className="h-full bg-white/20 animate-pulse"></div>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-
-        {/* Progress Messages */}
-        <div className="bg-white border rounded p-3 max-h-40 overflow-y-auto">
-          <div className="space-y-2">
-            {uploadState.analysisProgress?.length === 0 ? (
-              <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <div className="animate-pulse w-2 h-2 bg-gray-400 rounded-full"></div>
-                Connecting to analysis service...
-              </div>
-            ) : (
-              uploadState.analysisProgress?.slice(-5).map((message, index) => {
-                // Determine message type and styling
-                const isProcessing = message.message.includes('Processing:');
-                const isError = message.message.includes('error') || message.message.includes('Error') || message.message.includes('failed');
-                const isComplete = message.message.includes('completed') || message.message.includes('finished');
-
-                let icon = '📝';
-                let bgColor = 'bg-gray-50';
-                let textColor = 'text-gray-700';
-
-                if (isProcessing) {
-                  icon = '⚡';
-                  bgColor = 'bg-blue-50';
-                  textColor = 'text-blue-700';
-                } else if (isError) {
-                  icon = '❌';
-                  bgColor = 'bg-red-50';
-                  textColor = 'text-red-700';
-                } else if (isComplete) {
-                  icon = '✅';
-                  bgColor = 'bg-green-50';
-                  textColor = 'text-green-700';
-                }
-
-                return (
-                  <div key={index} className={`flex items-start gap-2 p-2 rounded text-sm ${bgColor}`}>
-                    <span className="text-xs mt-0.5">{icon}</span>
-                    <span className={textColor}>{message.message}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
         </div>
 
         {uploadState.analysisTaskId && (
