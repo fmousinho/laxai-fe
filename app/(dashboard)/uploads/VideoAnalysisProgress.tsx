@@ -45,6 +45,17 @@ interface VideoAnalysisProgressProps {
 export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }: VideoAnalysisProgressProps) {
   const [showModal, setShowModal] = useState(false);
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  // Countdown timer for initializing status
+  useEffect(() => {
+    if (countdown !== null && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0) {
+      setCountdown(null);
+    }
+  }, [countdown]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -95,22 +106,19 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             console.log('Updating state with polled data, current type:', prev.type);
             let message = '';
 
-            // Create more descriptive messages based on the data
-            if (data.status === 'processing' && data.progress_percent !== undefined) {
-              const progress = Math.round(data.progress_percent);
-              const framesInfo = data.frames_processed && data.total_frames ?
-                ` (${data.frames_processed}/${data.total_frames} frames)` : '';
-              const detectionsInfo = data.detections_count ?
-                ` - ${data.detections_count} detections` : '';
-              message = `Processing: ${progress}% complete${framesInfo}${detectionsInfo}`;
-            } else if (data.status === 'waiting') {
-              message = 'Queued for analysis';
-            } else if (data.status === 'started') {
-              message = 'Analysis started';
+            // Create messages based on the new status types
+            if (data.status === 'initializing') {
+              message = 'Proxy starting Cloud Run job';
+              // Start 3 minute countdown (180 seconds)
+              setCountdown(180);
+            } else if (data.status === 'running') {
+              const framesProcessed = data.frames_processed || 0;
+              const totalFrames = data.total_frames || 0;
+              message = `Processed ${framesProcessed} out of ${totalFrames} frames`;
             } else if (data.status === 'completed') {
               message = 'Analysis completed successfully';
-            } else if (data.status === 'failed') {
-              message = data.message || 'Analysis failed';
+            } else if (data.status === 'cancelled') {
+              message = 'Analysis was cancelled';
             } else if (data.message) {
               message = data.message;
             } else if (data.status) {
@@ -128,13 +136,12 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             console.log('New progress item:', { message, type: data.status });
 
             switch (data.status) {
-              case 'waiting':
-              case 'started':
-              case 'processing':
+              case 'initializing':
+              case 'running':
                 return { ...prev, type: 'analysing' as const, analysisProgress: newProgress };
               case 'completed':
                 return { ...prev, type: 'analysis_complete' as const, analysisProgress: newProgress };
-              case 'failed':
+              case 'cancelled':
                 return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
               default:
                 return { ...prev, analysisProgress: newProgress };
@@ -190,7 +197,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
 
   return (
     <div className="mt-6 text-center flex flex-col items-center gap-4">
-      <p className="mb-2 text-lg font-medium">Analysing Video</p>
+      <p className="mb-2 text-lg font-medium">Video Analysis</p>
       <video
         src={videoUrl!}
         controls
@@ -222,7 +229,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
       <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
         <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
           <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-          Video Analysis in Progress
+          {countdown !== null ? 'Initializing Analysis' : 'Video Analysis in Progress'}
         </h3>
 
         {/* Current Status */}
@@ -234,19 +241,35 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             </span>
           </div>
 
-          {/* Progress Bar for processing status */}
-          {uploadState.analysisProgress?.some(msg => msg.message.includes('Processing:')) && (
+          {/* Countdown Timer for initializing status */}
+          {countdown !== null && (
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="font-medium text-gray-700">Time remaining:</span>
+              <span className="text-orange-600 font-mono">
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+          )}
+
+          {/* Progress Bar for running status */}
+          {uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{
                   width: (() => {
                     const latestProcessing = uploadState.analysisProgress
-                      ?.filter(msg => msg.message.includes('Processing:'))
+                      ?.filter(msg => msg.message.includes('Processed'))
                       ?.pop();
-                    const match = latestProcessing?.message.match(/(\d+)%/);
-                    const progress = match ? parseInt(match[1], 10) : 0;
-                    return `${Math.min(100, Math.max(0, progress))}%`;
+                    if (latestProcessing) {
+                      const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
+                      if (match) {
+                        const processed = parseInt(match[1], 10);
+                        const total = parseInt(match[2], 10);
+                        return total > 0 ? `${Math.min(100, Math.max(0, (processed / total) * 100))}%` : '0%';
+                      }
+                    }
+                    return '0%';
                   })()
                 }}
               ></div>
