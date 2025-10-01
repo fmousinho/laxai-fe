@@ -90,7 +90,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
           const data = await response.json();
           console.log('Polled progress data:', data);
 
-          // Handle different status types (same logic as SSE)
+          // Handle different status types from polling response
           setUploadState(prev => {
             console.log('Updating state with polled data, current type:', prev.type);
             let message = '';
@@ -260,7 +260,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             {uploadState.analysisProgress?.length === 0 ? (
               <div className="flex items-center gap-2 text-gray-500 text-sm">
                 <div className="animate-pulse w-2 h-2 bg-gray-400 rounded-full"></div>
-                Connecting to analysis stream...
+                Connecting to analysis service...
               </div>
             ) : (
               uploadState.analysisProgress?.slice(-5).map((message, index) => {
