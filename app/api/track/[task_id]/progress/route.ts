@@ -12,11 +12,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ task_id: string }> }
 ) {
+  console.log('=== POLLING ROUTE CALLED ===');
   try {
     const tenantId = await getTenantId(req);
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
-    }
+    console.log('Tenant ID:', tenantId);
 
     const { task_id } = await params;
 
@@ -24,17 +23,28 @@ export async function GET(
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
-    // Make request to backend API
+    // Debug: Log the URL we're trying to call
+    const apiUrl = `${BACKEND_URL}/api/v1/track/${task_id}/progress`;
+    console.log(`Calling backend API: ${apiUrl}`);
+
+    // Make request to backend polling API
     const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/track/${task_id}/progress`,
+      url: apiUrl,
       method: 'GET',
-      params: { tenant_id: tenantId }
     });
 
+    console.log(`Backend response status: ${response.status}`);
+    console.log(`Backend response data:`, response.data);
     return NextResponse.json(response.data);
-  } catch (error) {
-    const { task_id } = await params;
-    console.error(`Error getting progress for task ${task_id}:`, error);
-    return NextResponse.json({ error: `Failed to get progress for task ${task_id}` }, { status: 500 });
+
+
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    } else {
+      const { task_id } = await params;
+      console.error(`Error getting progress for task ${task_id}:`, error);
+      return NextResponse.json({ error: `Failed to get progress for task ${task_id}` }, { status: 500 });
+    }
   }
 }

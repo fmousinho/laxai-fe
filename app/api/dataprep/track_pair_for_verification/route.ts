@@ -14,7 +14,7 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
   for (const prefix of prefixes) {
     try {
       // Security: Only process prefixes from process directories
-      if (!prefix.includes('/process/')) {
+      if (!prefix.includes('process/')) {
         console.warn(`Skipping non-process directory prefix: ${prefix}`);
         continue;
       }
