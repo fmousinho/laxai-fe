@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 // State machine types
 type UploadStateType = 
@@ -46,6 +46,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
   const [showModal, setShowModal] = useState(false);
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownStartedRef = useRef(false);
 
   // Countdown timer for initializing status
   useEffect(() => {
@@ -101,8 +102,11 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
           const data = await response.json();
           console.log('Polled progress data:', data);
 
-          // Handle countdown separately to avoid setState during render
-          if (data.status === 'initializing' && countdown === null) {
+                    // Handle countdown separately to avoid setState during render
+          console.log('Countdown ref before check:', countdownStartedRef.current);
+          if ((data.status === 'initializing' || data.status === 'not_started') && !countdownStartedRef.current) {
+            console.log('Setting countdown: ref was false, status:', data.status);
+            countdownStartedRef.current = true;
             setCountdown(180);
           }
 
@@ -113,7 +117,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
 
             // Create messages based on the new status types
             if (data.status === 'initializing') {
-              message = 'Proxy starting Cloud Run job';
+              message = 'Setting up analysis services...';
             } else if (data.status === 'running') {
               const framesProcessed = data.frames_processed || 0;
               const totalFrames = data.total_frames || 0;
