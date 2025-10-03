@@ -1,52 +1,30 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
+import { UploadState, VideoFile, AnalysisProgressItem, UploadStateType, AnalysingSubstateType } from './types';
 
 // State machine types
-type UploadStateType = 
-  | 'initial'           // drop zone only
-  | 'uploading'         // progress bar shown
-  | 'preparing'         // brief "Processing file..." after upload
-  | 'ready'             // player + buttons shown
-  | 'analysing'         // analysis in progress
-  | 'analysis_complete' // analysis finished
-  | 'failed_upload'     // upload failed
-  | 'failed_analysis'   // analysis failed
-  | 'deleting';         // file being deleted
 
-interface VideoFile {
-  fileName: string;
-  fullPath?: string;
-  signedUrl?: string;
-  size?: number;
-  created?: string;
-}
-
-interface AnalysisProgressItem {
-  message: string;
-  timestamp: string;
-  type: string;
-}
-
-interface UploadState {
-  type: UploadStateType;
-  videoFile?: VideoFile;
-  uploadProgress?: number;
-  analysisTaskId?: string;
-  analysisProgress?: AnalysisProgressItem[];
+interface AnalysisTask {
+  taskId: string;
+  status: AnalysingSubstateType;
+  statusMessage?: string;
+  framesProcessed?: number;
+  totalFrames?: number;
   error?: string;
 }
 
+
 interface VideoAnalysisProgressProps {
-  uploadState: UploadState;
+  uploadState: Extract<UploadState, { type: 'analysing' }>;
   setUploadState: React.Dispatch<React.SetStateAction<UploadState>>;
-  videoUrl: string | null;
 }
 
-export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }: VideoAnalysisProgressProps) {
+export function VideoAnalysisProgress({ uploadState, setUploadState }: VideoAnalysisProgressProps) {
   const [showModal, setShowModal] = useState(false);
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownStartedRef = useRef(false);
+  const stopPollingRef = useRef(false);
 
   // Countdown timer for initializing status
   useEffect(() => {
@@ -70,22 +48,23 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
 
   // Stop polling when analysis completes or fails
   useEffect(() => {
-    if (uploadState.type === 'analysis_complete' || uploadState.type === 'failed_analysis') {
+    if (uploadState.type != 'analysing') {
       if (pollingTimeout) {
         console.log('Stopping polling after analysis completion/failure');
         clearTimeout(pollingTimeout);
         setPollingTimeout(null);
       }
     }
-  }, [uploadState.type, pollingTimeout]);
+  }, [uploadState.type]);
 
   // Restart polling if component mounts with analysing state (e.g., page refresh)
   useEffect(() => {
     if (uploadState.type === 'analysing' && uploadState.analysisTaskId && !pollingTimeout) {
       console.log('Restarting polling for existing analysis task');
+      stopPollingRef.current = false;
       startProgressPolling(uploadState.analysisTaskId);
     }
-  }, [uploadState.type, uploadState.analysisTaskId, pollingTimeout]);
+  }, [pollingTimeout]);
 
   // Function to poll progress updates
   const pollProgress = async (taskId: string) => {
@@ -134,7 +113,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
               message = 'Analysis update received';
             }
 
-            const newProgress = [...(prev.analysisProgress || []), {
+            const newProgress = [...((prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress || []), {
               message,
               timestamp: new Date().toLocaleTimeString(),
               type: data.status || 'info'
@@ -145,15 +124,30 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
             switch (data.status) {
               case 'initializing':
               case 'running':
-                return { ...prev, type: 'analysing' as const, analysisProgress: newProgress };
+                return { 
+                  type: 'analysing' as const, 
+                  videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
+                  status: data.status as AnalysingSubstateType,
+                  analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
+                  analysisProgress: newProgress 
+                };
               case 'completed':
-                return { ...prev, type: 'analysis_complete' as const, analysisProgress: newProgress };
+                stopPollingRef.current = true;
+                return { type: 'analysis_complete' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
               case 'cancelled':
-                return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
+                stopPollingRef.current = true;
+                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis cancelled', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
               case 'failed':
-                return { ...prev, type: 'failed_analysis' as const, analysisProgress: newProgress };
+                stopPollingRef.current = true;
+                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis failed', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
               default:
-                return { ...prev, analysisProgress: newProgress };
+                return { 
+                  type: 'analysing' as const, 
+                  videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
+                  status: (prev as Extract<UploadState, { type: 'analysing' }>).status,
+                  analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
+                  analysisProgress: newProgress 
+                };
             }
           });
           return; // Success - exit the function
@@ -173,13 +167,15 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
       } catch (error) {
         console.error('Error polling progress:', error);
         setUploadState(prev => ({
-          ...prev,
           type: 'failed_analysis',
-          analysisProgress: [...(prev.analysisProgress || []), {
+          videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile,
+          analysisProgress: [...(prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress, {
             message: 'Connection error - retrying...',
             timestamp: new Date().toISOString(),
             type: 'error'
-          }]
+          }],
+          error: 'Connection error',
+          analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId
         }));
         return; // Exit on any error
       }
@@ -193,8 +189,8 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
     const pollSequentially = async () => {
       await pollProgress(taskId);
       
-      // Only schedule next poll if still analysing
-      if (uploadState.type === 'analysing') {
+      // Only schedule next poll if still analysing and not stopped
+      if (!stopPollingRef.current && uploadState.type === 'analysing') {
         const timeout = setTimeout(pollSequentially, 5000);
         setPollingTimeout(timeout);
       }
@@ -208,7 +204,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
     <div className="mt-6 text-center flex flex-col items-center gap-4">
       <p className="mb-2 text-lg font-medium">Video Analysis</p>
       <video
-        src={videoUrl!}
+        src={uploadState.videoFile?.signedUrl!}
         controls
         className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
         style={{ maxWidth: 400 }}
@@ -218,7 +214,7 @@ export function VideoAnalysisProgress({ uploadState, setUploadState, videoUrl }:
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
           <div className="relative" onClick={e => e.stopPropagation()}>
             <video
-              src={videoUrl!}
+              src={uploadState.videoFile?.signedUrl!}
               controls
               autoPlay
               className="rounded-lg border bg-black shadow-2xl"

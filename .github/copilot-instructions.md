@@ -33,13 +33,36 @@
 - **Auth0:** Do not use NextAuth. Use @auth0/nextjs-auth0 for all authentication. Configure via `.env.local` and use server utilities from `lib/auth.ts`.
 - **Environment Variables:** Use `.env.local` with project-specific names (e.g., `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`). For client-side access, use `NEXT_PUBLIC_` prefix.
 - **Styling:** Use Tailwind CSS classes and custom variables from `globals.css`. Follow existing color/font patterns.
+- **UI Components:** Use Shadcn UI components as the primary design language. Prefer Shadcn components over custom implementations whenever possible (Button, Card, Dialog, Table, etc.).
+- **File Organization:** Keep each TSX file under 200 lines when possible (soft limit). Break down large components into smaller, focused components in separate files.
+- **Component Separation:** Leverage separate component files and shared utilities for clarity. Extract reusable logic into custom hooks and utilities.
 - **File Uploads:** Use react-dropzone for drag-and-drop UI. See `app/(dashboard)/uploads/page.tsx` for example.
 - **SVG Icons:** Place in `public/` and import as needed.
 
-## Integration Points
-- **Auth0:** All authentication flows use @auth0/nextjs-auth0. Do not mix with NextAuth.
-- **Database:** Use Drizzle ORM for queries. Connection logic in `lib/db.ts`.
-- **Analytics:** Use Vercel Analytics via `@vercel/analytics/react` in layout files.
+## Shadcn UI Design Language
+- **Primary Components:** Use Shadcn UI components as the foundation for all UI elements:
+  - `Button` for all interactive elements
+  - `Card` for content containers
+  - `Dialog`/`Sheet` for modals and side panels
+  - `Table` for data display
+  - `Input`/`Textarea` for form fields
+  - `Badge` for status indicators
+  - `Progress` for loading states
+  - `Alert` for notifications
+- **Consistent Theming:** Apply custom colors and fonts via Tailwind CSS variables defined in `globals.css`
+- **Accessibility:** Shadcn components include built-in accessibility features - leverage them fully
+
+## Component Organization
+- **File Size Limit:** Aim to keep each TSX component file under 200 lines (soft limit)
+- **Component Extraction:** Break down complex components into smaller, focused pieces:
+  - Extract form logic into separate components
+  - Create dedicated components for complex UI sections
+  - Use custom hooks for shared logic
+- **File Structure:** Organize related components in the same directory with clear naming:
+  - `ComponentName.tsx` - Main component
+  - `ComponentName.types.ts` - Type definitions
+  - `ComponentName.utils.ts` - Utility functions
+  - `SubComponent.tsx` - Extracted sub-components
 
 ## Example: Auth0 Usage
 ```tsx
