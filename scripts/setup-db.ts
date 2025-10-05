@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { products, statusEnum } from '../lib/db';
+import { statusEnum } from '../lib/db';
 
 // Load environment variables
 require('dotenv').config({ path: '.env.local' });

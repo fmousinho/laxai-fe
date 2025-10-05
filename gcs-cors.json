@@ -1,8 +1,17 @@
 [
   {
     "maxAgeSeconds": 3600,
-    "method": ["PUT", "POST", "GET", "HEAD"],
+    "method": ["PUT", "POST", "GET", "HEAD", "OPTIONS"],
     "origin": ["http://localhost:3000"],
-    "responseHeader": ["Content-Type", "x-goog-resumable"]
+    "responseHeader": [
+      "Content-Type",
+      "x-goog-resumable",
+      "Content-Range",
+      "Range",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers",
+      "Access-Control-Allow-Credentials"
+    ]
   }
 ]

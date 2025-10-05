@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { UploadState, VideoFile, AnalysisProgressItem, UploadStateType, AnalysingSubstateType } from './types';
+import { UploadState, VideoFile, AnalysisProgressItem, UploadStateType, AnalysingSubstateType } from '../types';
 
 // State machine types
 
@@ -14,12 +14,12 @@ interface AnalysisTask {
 }
 
 
-interface VideoAnalysisProgressProps {
+interface AnalysingStateProps {
   uploadState: Extract<UploadState, { type: 'analysing' }>;
   setUploadState: React.Dispatch<React.SetStateAction<UploadState>>;
 }
 
-export function VideoAnalysisProgress({ uploadState, setUploadState }: VideoAnalysisProgressProps) {
+export function AnalysingState({ uploadState, setUploadState }: AnalysingStateProps) {
   const [showModal, setShowModal] = useState(false);
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);

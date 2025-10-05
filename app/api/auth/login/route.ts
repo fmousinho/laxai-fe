@@ -1,8 +1,10 @@
-import { handleLogin } from '@auth0/nextjs-auth0';
+import { auth0 } from '@/lib/auth0';
 
-export const GET = handleLogin({
-  authorizationParams: {
-    // Enable Google and Apple social logins via Auth0 connections
-    connection: undefined, // Let Auth0 show all enabled connections
-  },
-});
+export async function GET() {
+  return auth0.startInteractiveLogin({
+    authorizationParameters: {
+      // Enable Google and Apple social logins via Auth0 connections
+      connection: undefined, // Let Auth0 show all enabled connections
+    },
+  });
+}
