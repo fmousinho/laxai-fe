@@ -118,21 +118,6 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     };
   }, [pollingTimeout]);
 
-  // Stop polling when analysis completes or fails
-  useEffect(() => {
-    if (uploadState.type != 'analysing') {
-      if (pollingTimeout) {
-        console.log('Stopping polling after analysis completion/failure');
-        clearTimeout(pollingTimeout);
-        setPollingTimeout(null);
-      }
-      // Clear countdown from localStorage when analysis is no longer running
-      if (uploadState.analysisTaskId) {
-        clearStoredCountdown(uploadState.analysisTaskId);
-      }
-    }
-  }, [uploadState.type, uploadState.analysisTaskId]);
-
   // Restart polling if component mounts with analysing state (e.g., page refresh)
   useEffect(() => {
     if (uploadState.type === 'analysing' && uploadState.analysisTaskId && !pollingTimeout) {
@@ -273,8 +258,8 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     const pollSequentially = async () => {
       await pollProgress(taskId);
       
-      // Only schedule next poll if still analysing and not stopped
-      if (!stopPollingRef.current && uploadState.type === 'analysing') {
+      // Only schedule next poll if not stopped
+      if (!stopPollingRef.current) {
         const timeout = setTimeout(pollSequentially, 5000);
         setPollingTimeout(timeout);
       }
