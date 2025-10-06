@@ -2,7 +2,7 @@
   {
     "maxAgeSeconds": 3600,
     "method": ["PUT", "POST", "GET", "HEAD", "OPTIONS"],
-    "origin": ["http://localhost:3000"],
+    "origin": ["http://localhost:3000", "http://localhost:3001"],
     "responseHeader": [
       "Content-Type",
       "x-goog-resumable",
