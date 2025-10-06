@@ -312,19 +312,19 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         <h3 className="text-lg font-semibold mb-4 text-center">Analysis Activities</h3>
         <div className="space-y-3">
           {/* Activity 1: Setting up backend services */}
-          <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center p-3 rounded-lg border bg-white">
+            <div className="flex items-center gap-3 flex-1">
               <div className={`w-3 h-3 rounded-full ${
                 uploadState.status === 'initializing' ? 'bg-yellow-400' :
                 ['running', 'completed'].includes(uploadState.status) ? 'bg-green-500' : 'bg-gray-300'
               }`}></div>
               <span className="text-sm font-medium">Setting up backend services for analysis</span>
+              {uploadState.status === 'initializing' && countdown !== null && (
+                <span className="text-sm font-medium text-orange-600 ml-2">
+                  ({Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')})
+                </span>
+              )}
             </div>
-            {uploadState.status === 'initializing' && countdown !== null && (
-              <span className="text-xs text-orange-600 font-mono">
-                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-              </span>
-            )}
           </div>
 
           {/* Activity 2: Detecting players */}
@@ -364,106 +364,6 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-        <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-          {countdown !== null ? 'Initializing Analysis' : 'Video Analysis in Progress'}
-        </h3>
-
-        {/* Current Status */}
-        <div className="mb-3 p-3 bg-white rounded border">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="font-medium text-gray-700">Status:</span>
-            <span className="text-blue-600 capitalize flex items-center gap-2">
-              {(() => {
-                const latestMessage = uploadState.analysisProgress?.[uploadState.analysisProgress.length - 1];
-                const message = latestMessage?.message || 'Connecting...';
-                const type = latestMessage?.type || 'info';
-
-                // Add whimsical emojis based on status type
-                let emoji = '🔄';
-                if (type === 'initializing') emoji = '🚀';
-                else if (type === 'running') emoji = '⚡';
-                else if (type === 'completed') emoji = '🎉';
-                else if (type === 'error' || type === 'failed') emoji = '😵';
-                else if (type === 'cancelled') emoji = '🛑';
-
-                return (
-                  <>
-                    <span>{emoji}</span>
-                    <span>{message}</span>
-                  </>
-                );
-              })()}
-            </span>
-          </div>
-
-          {/* Countdown Timer for initializing status */}
-          {countdown !== null && (
-            <div className="flex items-center justify-between text-sm mb-3">
-              <span className="font-medium text-gray-700">Time remaining:</span>
-              <span className="text-orange-600 font-mono text-lg">
-                ⏱️ {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-              </span>
-            </div>
-          )}
-
-          {/* Enhanced Progress Bar for running status */}
-          {uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
-            <div className="w-full">
-              <div className="flex justify-between text-xs text-gray-600 mb-1">
-                <span>Progress</span>
-                <span>
-                  {(() => {
-                    const latestProcessing = uploadState.analysisProgress
-                      ?.filter(msg => msg.message.includes('Processed'))
-                      ?.pop();
-                    if (latestProcessing) {
-                      const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
-                      if (match) {
-                        const processed = parseInt(match[1], 10);
-                        const total = parseInt(match[2], 10);
-                        return `${Math.round((processed / total) * 100)}%`;
-                      }
-                    }
-                    return '0%';
-                  })()}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
-                <div
-                  className="h-3 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600 transition-all duration-500 ease-out shadow-sm"
-                  style={{
-                    width: (() => {
-                      const latestProcessing = uploadState.analysisProgress
-                        ?.filter(msg => msg.message.includes('Processed'))
-                        ?.pop();
-                      if (latestProcessing) {
-                        const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
-                        if (match) {
-                          const processed = parseInt(match[1], 10);
-                          const total = parseInt(match[2], 10);
-                          return total > 0 ? `${Math.min(100, Math.max(0, (processed / total) * 100))}%` : '0%';
-                        }
-                      }
-                      return '0%';
-                    })()
-                  }}
-                >
-                  <div className="h-full bg-white/20 animate-pulse"></div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {uploadState.analysisTaskId && (
-          <div className="mt-3 text-xs text-blue-600 bg-blue-50 p-2 rounded">
-            <strong>Task ID:</strong> {uploadState.analysisTaskId}
-          </div>
-        )}
       </div>
 
       {/* Cancel Analysis Button */}
