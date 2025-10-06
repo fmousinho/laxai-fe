@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { UploadState, VideoFile, AnalysisProgressItem, UploadStateType, AnalysingSubstateType } from '../types';
+import { Button } from '@/components/ui/button';
 
 // State machine types
 
@@ -26,15 +27,77 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   const countdownStartedRef = useRef(false);
   const stopPollingRef = useRef(false);
 
+  // Helper function to get countdown from localStorage
+  const getStoredCountdown = (taskId: string): number | null => {
+    try {
+      const stored = localStorage.getItem(`analysis_countdown_${taskId}`);
+      if (stored) {
+        const { startTime, duration } = JSON.parse(stored);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const remaining = Math.max(0, duration - elapsed);
+        return remaining > 0 ? remaining : null;
+      }
+    } catch (error) {
+      console.error('Error reading countdown from localStorage:', error);
+    }
+    return null;
+  };
+
+  // Helper function to store countdown in localStorage
+  const storeCountdown = (taskId: string, duration: number) => {
+    try {
+      const startTime = Date.now();
+      localStorage.setItem(`analysis_countdown_${taskId}`, JSON.stringify({
+        startTime,
+        duration
+      }));
+    } catch (error) {
+      console.error('Error storing countdown in localStorage:', error);
+    }
+  };
+
+  // Helper function to clear countdown from localStorage
+  const clearStoredCountdown = (taskId: string) => {
+    try {
+      localStorage.removeItem(`analysis_countdown_${taskId}`);
+    } catch (error) {
+      console.error('Error clearing countdown from localStorage:', error);
+    }
+  };
+
   // Countdown timer for initializing status
   useEffect(() => {
+    if (uploadState.analysisTaskId) {
+      // Check if there's a stored countdown for this task
+      const storedCountdown = getStoredCountdown(uploadState.analysisTaskId);
+      if (storedCountdown !== null) {
+        setCountdown(storedCountdown);
+        countdownStartedRef.current = true;
+      }
+    }
+  }, [uploadState.analysisTaskId]);
+
+  useEffect(() => {
     if (countdown !== null && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      const timer = setTimeout(() => {
+        const newCountdown = countdown - 1;
+        setCountdown(newCountdown);
+        
+        // Clear localStorage when countdown reaches 0
+        if (newCountdown === 0 && uploadState.analysisTaskId) {
+          clearStoredCountdown(uploadState.analysisTaskId);
+        }
+      }, 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
       setCountdown(null);
+      countdownStartedRef.current = false;
+      // Clear localStorage when countdown naturally expires
+      if (uploadState.analysisTaskId) {
+        clearStoredCountdown(uploadState.analysisTaskId);
+      }
     }
-  }, [countdown]);
+  }, [countdown, uploadState.analysisTaskId]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -43,6 +106,10 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         console.log('Cleaning up polling timeout');
         clearTimeout(pollingTimeout);
       }
+      // Clear any countdown data on unmount (optional - could be kept for page refresh persistence)
+      // if (uploadState.analysisTaskId) {
+      //   clearStoredCountdown(uploadState.analysisTaskId);
+      // }
     };
   }, [pollingTimeout]);
 
@@ -54,8 +121,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         clearTimeout(pollingTimeout);
         setPollingTimeout(null);
       }
+      // Clear countdown from localStorage when analysis is no longer running
+      if (uploadState.analysisTaskId) {
+        clearStoredCountdown(uploadState.analysisTaskId);
+      }
     }
-  }, [uploadState.type]);
+  }, [uploadState.type, uploadState.analysisTaskId]);
 
   // Restart polling if component mounts with analysing state (e.g., page refresh)
   useEffect(() => {
@@ -86,7 +157,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           if ((data.status === 'initializing' || data.status === 'not_started') && !countdownStartedRef.current) {
             console.log('Setting countdown: ref was false, status:', data.status);
             countdownStartedRef.current = true;
-            setCountdown(180);
+            const countdownDuration = 180; // 3 minutes
+            setCountdown(countdownDuration);
+            // Store countdown in localStorage for persistence across page navigation
+            if (taskId) {
+              storeCountdown(taskId, countdownDuration);
+            }
           }
 
           // Handle different status types from polling response
@@ -205,8 +281,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
       <p className="mb-2 text-lg font-medium">Video Analysis</p>
       <video
         src={uploadState.videoFile?.signedUrl!}
-        controls
-        className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+        className="mx-auto max-h-64 rounded-lg border bg-black"
         style={{ maxWidth: 400 }}
         onClick={() => setShowModal(true)}
       />
@@ -231,6 +306,66 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         </div>
       )}
       <div className="text-sm text-muted-foreground">{uploadState.videoFile?.fileName}</div>
+
+      {/* Analysis Activities */}
+      <div className="mt-6 w-full max-w-md mx-auto">
+        <h3 className="text-lg font-semibold mb-4 text-center">Analysis Activities</h3>
+        <div className="space-y-3">
+          {/* Activity 1: Setting up backend services */}
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${
+                uploadState.status === 'initializing' ? 'bg-yellow-400' :
+                ['running', 'completed'].includes(uploadState.status) ? 'bg-green-500' : 'bg-gray-300'
+              }`}></div>
+              <span className="text-sm font-medium">Setting up backend services for analysis</span>
+            </div>
+            {uploadState.status === 'initializing' && countdown !== null && (
+              <span className="text-xs text-orange-600 font-mono">
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </span>
+            )}
+          </div>
+
+          {/* Activity 2: Detecting players */}
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${
+                uploadState.status === 'running' ? 'bg-yellow-400' :
+                uploadState.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
+              }`}></div>
+              <span className="text-sm font-medium">Detecting players</span>
+            </div>
+            {uploadState.status === 'running' && uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
+              <span className="text-xs text-blue-600">
+                {(() => {
+                  const latestProcessing = uploadState.analysisProgress
+                    ?.filter(msg => msg.message.includes('Processed'))
+                    ?.pop();
+                  if (latestProcessing) {
+                    const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
+                    if (match) {
+                      return `${match[1]} of ${match[2]}`;
+                    }
+                  }
+                  return '';
+                })()}
+              </span>
+            )}
+          </div>
+
+          {/* Activity 3: Capturing and storing player images */}
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${
+                uploadState.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
+              }`}></div>
+              <span className="text-sm font-medium">Capturing and storing player images</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
         <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
           <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
@@ -329,6 +464,58 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
             <strong>Task ID:</strong> {uploadState.analysisTaskId}
           </div>
         )}
+      </div>
+
+      {/* Cancel Analysis Button */}
+      <div className="mt-6">
+        <Button
+          variant="outline"
+          className="px-6 py-2 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400"
+          onClick={async () => {
+            if (!uploadState.analysisTaskId) {
+              console.error('No task ID available for cancellation');
+              return;
+            }
+
+            try {
+              const response = await fetch(`/api/track/${uploadState.analysisTaskId}`, {
+                method: 'DELETE',
+              });
+
+              if (response.ok) {
+                console.log('Analysis cancelled successfully');
+                // Stop polling
+                stopPollingRef.current = true;
+                if (pollingTimeout) {
+                  clearTimeout(pollingTimeout);
+                  setPollingTimeout(null);
+                }
+                // Clear countdown from localStorage
+                clearStoredCountdown(uploadState.analysisTaskId);
+                // Update state to cancelled status
+                setUploadState(prev => ({
+                  type: 'failed_analysis',
+                  videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile,
+                  analysisProgress: [...(prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress, {
+                    message: 'Analysis cancelled by user',
+                    timestamp: new Date().toISOString(),
+                    type: 'cancelled'
+                  }],
+                  error: 'Analysis cancelled by user',
+                  analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId
+                }));
+              } else {
+                console.error('Failed to cancel analysis:', response.statusText);
+                // Could show an error message to the user here
+              }
+            } catch (error) {
+              console.error('Error cancelling analysis:', error);
+              // Could show an error message to the user here
+            }
+          }}
+        >
+          Cancel Analysis
+        </Button>
       </div>
     </div>
   );

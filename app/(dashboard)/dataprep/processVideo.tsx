@@ -129,7 +129,15 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
         return;
       }
       const data = await res.json();
-      setImagePair(data);
+      
+      // Check if we got next images in the response
+      if (data.next_images) {
+        console.log('Received next images in classify response');
+        setImagePair(data.next_images);
+      } else {
+        console.log('No more images available');
+        setImagePair(null);
+      }
     } catch (error) {
       console.error('Failed to classify pair:', error);
       handleApiError(error, 'handleClassify');
@@ -161,6 +169,23 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
 
   // Helper to render a scrollable image row (fixed height, horizontal scroll only)
   function ImageRow({ images, refEl }: { images: string[]; refEl: React.RefObject<HTMLDivElement | null> }) {
+    if (!images || !Array.isArray(images)) {
+      return (
+        <div
+          ref={refEl}
+          className="rounded-2xl bg-gray-100 shadow p-3 my-4 flex items-center justify-center w-full box-border"
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            flexShrink: 0,
+            height: 200,
+          }}
+        >
+          <span className="text-gray-500">No images available</span>
+        </div>
+      );
+    }
+
     return (
       <div
         ref={refEl}
@@ -171,7 +196,7 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
           flexShrink: 0,
           scrollbarWidth: 'thin',
           WebkitOverflowScrolling: 'touch',
-          height: 90,
+          height: 200,
         }}
       >
         {images.map((src, i) => (
@@ -180,8 +205,8 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
             src={src}
             alt="data"
             loading="lazy"
-            className="h-[70px] object-contain rounded border"
-            style={{ minWidth: 70, maxWidth: 140 }}
+            className="h-[180px] object-contain rounded border"
+            style={{ minWidth: 120, maxWidth: 240 }}
           />
         ))}
       </div>
