@@ -135,8 +135,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { label } = await req.json();
-    if (!label || !['same', 'different'].includes(label)) {
-      return NextResponse.json({ error: 'Invalid label. Must be "same" or "different"' }, { status: 400 });
+    if (!label || !['same', 'different', 'skip'].includes(label)) {
+      return NextResponse.json({ error: 'Invalid label. Must be "same", "different", or "skip"' }, { status: 400 });
     }
 
     // Authenticate with Google Cloud

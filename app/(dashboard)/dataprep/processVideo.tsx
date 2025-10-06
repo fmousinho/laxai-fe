@@ -175,6 +175,38 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       handleApiError(error, 'handleClassify');
     }
     setLoading(false);
+  };
+
+  const handleSkip = async () => {
+    setLoading(true);
+    clearError(); // Clear any previous errors
+
+    try {
+      const res = await fetch("/api/dataprep/classify_pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: "skip" }),
+      });
+      const isOk = await handleFetchError(res, 'handleSkip');
+      if (!isOk) {
+        setLoading(false);
+        return;
+      }
+      const responseData = await res.json();
+      
+      // Check if we got next images in the response
+      if (responseData.next_images) {
+        console.log('Received next images in skip response');
+        setImagePair(responseData.next_images);
+      } else {
+        console.log('No more images available');
+        setImagePair(null);
+      }
+    } catch (error) {
+      console.error('Failed to skip pair:', error);
+      handleApiError(error, 'handleSkip');
+    }
+    setLoading(false);
   };  const handleSuspend = async () => {
     setLoading(true);
     clearError(); // Clear any previous errors
@@ -353,7 +385,7 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
             </button>
             <button
               className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
-              onClick={() => {/* TODO: implement skip behavior */}}
+              onClick={handleSkip}
               disabled={loading}
             >
               Skip
