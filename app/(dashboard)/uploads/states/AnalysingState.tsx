@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UploadState, VideoFile, AnalysisProgressItem, UploadStateType, AnalysingSubstateType } from '../types';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, Clock, Circle, Loader2 } from 'lucide-react';
 
 // State machine types
 
@@ -24,9 +26,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   const [showModal, setShowModal] = useState(false);
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const countdownStartedRef = useRef(false);
-  const stopPollingRef = useRef(false);
-  const [analysisPhase, setAnalysisPhase] = useState<'initializing' | 'running' | 'completed'>('initializing');
+  const [currentProgressStatus, setCurrentProgressStatus] = useState<AnalysingSubstateType | null>(null);
 
   // Helper function to get countdown from localStorage
   const getStoredCountdown = (taskId: string): number | null => {
@@ -66,41 +66,28 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
   };
 
-  // Countdown timer for initializing status
+  // Initialize countdown on mount if we have a taskId
   useEffect(() => {
     if (uploadState.analysisTaskId) {
-      // Check if there's a stored countdown for this task
       const storedCountdown = getStoredCountdown(uploadState.analysisTaskId);
       if (storedCountdown !== null) {
         setCountdown(storedCountdown);
-        countdownStartedRef.current = true;
       }
     }
   }, [uploadState.analysisTaskId]);
 
+  // Countdown timer effect
   useEffect(() => {
     if (countdown !== null && countdown > 0) {
       const timer = setTimeout(() => {
-        const newCountdown = countdown - 1;
-        setCountdown(newCountdown);
-        
-        // Clear localStorage when countdown reaches 0
-        if (newCountdown === 0 && uploadState.analysisTaskId) {
-          clearStoredCountdown(uploadState.analysisTaskId);
-          // Move to running phase when countdown completes
-          setAnalysisPhase('running');
-        }
+        setCountdown(countdown - 1);
       }, 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
       setCountdown(null);
-      countdownStartedRef.current = false;
-      // Clear localStorage when countdown naturally expires
       if (uploadState.analysisTaskId) {
         clearStoredCountdown(uploadState.analysisTaskId);
       }
-      // Move to running phase when countdown completes
-      setAnalysisPhase('running');
     }
   }, [countdown, uploadState.analysisTaskId]);
 
@@ -108,146 +95,139 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   useEffect(() => {
     return () => {
       if (pollingTimeout) {
-        console.log('Cleaning up polling timeout');
         clearTimeout(pollingTimeout);
+        setPollingTimeout(null);
       }
-      // Clear any countdown data on unmount (optional - could be kept for page refresh persistence)
-      // if (uploadState.analysisTaskId) {
-      //   clearStoredCountdown(uploadState.analysisTaskId);
-      // }
     };
   }, [pollingTimeout]);
 
-  // Restart polling if component mounts with analysing state (e.g., page refresh)
+  // Stop polling when we leave analysing state
+  useEffect(() => {
+    if (uploadState.type !== 'analysing') {
+      if (pollingTimeout) {
+        clearTimeout(pollingTimeout);
+        setPollingTimeout(null);
+      }
+      if (uploadState.analysisTaskId) {
+        clearStoredCountdown(uploadState.analysisTaskId);
+      }
+    }
+  }, [uploadState.type, uploadState.analysisTaskId, pollingTimeout]);
+
+  // Start polling when component mounts with analysing state
   useEffect(() => {
     if (uploadState.type === 'analysing' && uploadState.analysisTaskId && !pollingTimeout) {
-      console.log('Restarting polling for existing analysis task');
-      stopPollingRef.current = false;
       startProgressPolling(uploadState.analysisTaskId);
     }
-  }, [pollingTimeout]);
+  }, [uploadState.type, uploadState.analysisTaskId, pollingTimeout]);
+
+  // Determine if we should be polling
+  const shouldPoll = uploadState.type === 'analysing' && 
+                     (currentProgressStatus === null || currentProgressStatus === 'not_started' || currentProgressStatus === 'running');
 
   // Function to poll progress updates
-  const pollProgress = async (taskId: string) => {
-    let retryCount = 0;
-    const maxRetries = 3;
+  const pollProgress = async (taskId: string): Promise<AnalysingSubstateType | null> => {
+    try {
+      console.log('Polling progress for task:', taskId);
+      const response = await fetch(`/api/track/${taskId}/progress`);
 
-    while (retryCount < maxRetries) {
-      try {
-        console.log('Polling progress for task:', taskId, retryCount > 0 ? `(retry ${retryCount})` : '');
-        const response = await fetch(`/api/track/${taskId}/progress`);
+      if (response.status === 200) {
+        const data = await response.json();
+        console.log('Polled progress data:', data);
 
-        if (response.status === 200) {
-          // Success - process the data
-          const data = await response.json();
-          console.log('Polled progress data:', data);
+        // Update current progress status
+        setCurrentProgressStatus(data.status);
 
-                    // Handle countdown separately to avoid setState during render
-          console.log('Countdown ref before check:', countdownStartedRef.current);
-          if ((data.status === 'not_started') && !countdownStartedRef.current) {
-            console.log('Setting countdown: ref was false, status:', data.status);
-            countdownStartedRef.current = true;
-            const countdownDuration = 180; // 3 minutes
-            setCountdown(countdownDuration);
-            // Store countdown in localStorage for persistence across page navigation
-            if (taskId) {
-              storeCountdown(taskId, countdownDuration);
-            }
-          }
-
-          // Handle different status types from polling response
-          setUploadState(prev => {
-            console.log('Updating state with polled data, current type:', prev.type);
-            let message = '';
-
-            // Create messages based on the new status types
-            if (data.status === 'not_started') {
-              message = 'Setting up analysis services...';
-            } else if (data.status === 'running') {
-              const framesProcessed = data.frames_processed || 0;
-              const totalFrames = data.total_frames || 0;
-              message = `Processed ${framesProcessed} out of ${totalFrames} frames`;
-            } else if (data.status === 'completed') {
-              message = 'Analysis completed successfully';
-            } else if (data.status === 'cancelled') {
-              message = 'Analysis was cancelled';
-            } else if (data.status === 'error') {
-              message = 'Analysis failed with an error';
-            } else if (data.message) {
-              message = data.message;
-            } else if (data.status) {
-              message = `Status: ${data.status}`;
-            } else {
-              message = 'Analysis update received';
-            }
-
-            const newProgress = [...((prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress || []), {
-              message,
-              timestamp: new Date().toLocaleTimeString(),
-              type: data.status || 'info'
-            }];
-
-            console.log('New progress item:', { message, type: data.status });
-
-            switch (data.status) {
-              case 'not_started':
-              case 'running':
-                return { 
-                  type: 'analysing' as const, 
-                  videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
-                  status: data.status as AnalysingSubstateType,
-                  analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
-                  analysisProgress: newProgress 
-                };
-              case 'completed':
-                stopPollingRef.current = true;
-                setAnalysisPhase('completed');
-                return { type: 'analysis_complete' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
-              case 'cancelled':
-                stopPollingRef.current = true;
-                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis cancelled', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
-              case 'error':
-                stopPollingRef.current = true;
-                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis failed with an error', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
-              default:
-                return { 
-                  type: 'analysing' as const, 
-                  videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
-                  status: (prev as Extract<UploadState, { type: 'analysing' }>).status,
-                  analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
-                  analysisProgress: newProgress 
-                };
-            }
-          });
-          return; // Success - exit the function
-        } else if (response.status === 404) {
-          // Task not found - retry after 5 seconds
-          retryCount++;
-          if (retryCount >= maxRetries) {
-            throw new Error(`Task ${taskId} not found after ${maxRetries} attempts`);
-          }
-          console.log(`Task ${taskId} not found (404), retrying in 5 seconds... (${retryCount}/${maxRetries})`);
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          continue; // Retry the loop
-        } else {
-          // Any other non-success status - throw error immediately
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Handle countdown for not_started status
+        if (data.status === 'not_started' && countdown === null) {
+          const countdownDuration = 180; // 3 minutes
+          setCountdown(countdownDuration);
+          storeCountdown(taskId, countdownDuration);
+        } else if (data.status !== 'not_started' && countdown !== null) {
+          // Clear countdown when status changes away from not_started
+          setCountdown(null);
+          clearStoredCountdown(taskId);
         }
-      } catch (error) {
-        console.error('Error polling progress:', error);
-        setUploadState(prev => ({
-          type: 'failed_analysis',
-          videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile,
-          analysisProgress: [...(prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress, {
-            message: 'Connection error - retrying...',
-            timestamp: new Date().toISOString(),
-            type: 'error'
-          }],
-          error: 'Connection error',
-          analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId
-        }));
-        return; // Exit on any error
+
+        // Handle state transitions based on status
+        setUploadState(prev => {
+          let message = '';
+
+          if (data.status === 'not_started') {
+            message = 'Setting up analysis services...';
+          } else if (data.status === 'running') {
+            const framesProcessed = data.frames_processed || 0;
+            const totalFrames = data.total_frames || 0;
+            message = `Processed ${framesProcessed} out of ${totalFrames} frames`;
+          } else if (data.status === 'completed') {
+            message = 'Analysis completed successfully';
+          } else if (data.status === 'cancelled') {
+            message = 'Analysis was cancelled';
+          } else if (data.status === 'error') {
+            message = 'Analysis failed with an error';
+          } else if (data.message) {
+            message = data.message;
+          } else if (data.status) {
+            message = `Status: ${data.status}`;
+          } else {
+            message = 'Analysis update received';
+          }
+
+          const newProgress = [...((prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress || []), {
+            message,
+            timestamp: new Date().toLocaleTimeString(),
+            type: data.status || 'info'
+          }];
+
+          switch (data.status) {
+            case 'not_started':
+            case 'running':
+              return { 
+                type: 'analysing' as const, 
+                videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
+                status: data.status as AnalysingSubstateType,
+                analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
+                analysisProgress: newProgress 
+              };
+            case 'completed':
+              return { type: 'analysis_complete' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
+            case 'error':
+            case 'cancelled':
+              return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: data.status === 'error' ? 'Analysis failed with an error' : 'Analysis cancelled', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
+            default:
+              return { 
+                type: 'analysing' as const, 
+                videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, 
+                status: (prev as Extract<UploadState, { type: 'analysing' }>).status,
+                analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId, 
+                analysisProgress: newProgress 
+              };
+          }
+        });
+
+        return data.status;
+      } else if (response.status === 404) {
+        // Task not found - retry after 5 seconds
+        console.log(`Task ${taskId} not found (404), retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return await pollProgress(taskId); // Retry
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+    } catch (error) {
+      console.error('Error polling progress:', error);
+      setUploadState(prev => ({
+        type: 'failed_analysis',
+        videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile,
+        analysisProgress: [...(prev as Extract<UploadState, { type: 'analysing' }>).analysisProgress, {
+          message: 'Connection error',
+          timestamp: new Date().toISOString(),
+          type: 'error'
+        }],
+        error: 'Connection error',
+        analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId
+      }));
+      return null;
     }
   };
 
@@ -256,10 +236,13 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     console.log('Starting progress polling for task:', taskId);
 
     const pollSequentially = async () => {
-      await pollProgress(taskId);
+      const status = await pollProgress(taskId);
       
-      // Only schedule next poll if not stopped
-      if (!stopPollingRef.current) {
+      // Schedule next poll if conditions still met
+      const currentShouldPoll = uploadState.type === 'analysing' && 
+                               (status === null || status === 'not_started' || status === 'running');
+      
+      if (currentShouldPoll) {
         const timeout = setTimeout(pollSequentially, 5000);
         setPollingTimeout(timeout);
       }
@@ -305,32 +288,39 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         <h3 className="text-lg font-semibold mb-4 text-center">Analysis Activities</h3>
         <div className="space-y-3">
           {/* Activity 1: Setting up backend services */}
-          <div className="flex items-center p-3 rounded-lg border bg-white">
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
             <div className="flex items-center gap-3 flex-1">
-              <div className={`w-3 h-3 rounded-full ${
-                analysisPhase === 'initializing' ? 'bg-yellow-400' :
-                ['running', 'completed'].includes(analysisPhase) ? 'bg-green-500' : 'bg-gray-300'
-              }`}></div>
-              <span className="text-sm font-medium">Setting up backend services for analysis</span>
-              {analysisPhase === 'initializing' && countdown !== null && (
-                <span className="text-sm font-medium text-orange-600 ml-2">
-                  ({Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')})
-                </span>
+              {currentProgressStatus === null || currentProgressStatus === 'not_started' ? (
+                <Circle className="w-4 h-4 text-muted-foreground" />
+              ) : currentProgressStatus === 'running' ? (
+                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4 text-green-600" />
               )}
+              <span className="text-sm font-medium">Setting up backend services for analysis</span>
             </div>
+            {currentProgressStatus === 'not_started' && countdown !== null && (
+              <Badge variant="secondary" className="text-orange-600 border-orange-200">
+                <Clock className="w-3 h-3 mr-1" />
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </Badge>
+            )}
           </div>
 
           {/* Activity 2: Detecting players */}
           <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${
-                analysisPhase === 'running' ? 'bg-yellow-400' :
-                analysisPhase === 'completed' ? 'bg-green-500' : 'bg-gray-300'
-              }`}></div>
+            <div className="flex items-center gap-3 flex-1">
+              {currentProgressStatus === 'running' ? (
+                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+              ) : currentProgressStatus === 'completed' ? (
+                <CheckCircle className="w-4 h-4 text-green-600" />
+              ) : (
+                <Circle className="w-4 h-4 text-muted-foreground" />
+              )}
               <span className="text-sm font-medium">Detecting players</span>
             </div>
-            {analysisPhase === 'running' && uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
-              <span className="text-xs text-blue-600">
+            {currentProgressStatus === 'running' && uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
+              <Badge variant="outline" className="text-blue-600 border-blue-200">
                 {(() => {
                   const latestProcessing = uploadState.analysisProgress
                     ?.filter(msg => msg.message.includes('Processed'))
@@ -343,16 +333,18 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
                   }
                   return '';
                 })()}
-              </span>
+              </Badge>
             )}
           </div>
 
           {/* Activity 3: Capturing and storing player images */}
           <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${
-                uploadState.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
-              }`}></div>
+            <div className="flex items-center gap-3 flex-1">
+              {currentProgressStatus === 'completed' ? (
+                <CheckCircle className="w-4 h-4 text-green-600" />
+              ) : (
+                <Circle className="w-4 h-4 text-muted-foreground" />
+              )}
               <span className="text-sm font-medium">Capturing and storing player images</span>
             </div>
           </div>
@@ -378,7 +370,6 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
               if (response.ok) {
                 console.log('Analysis cancelled successfully');
                 // Stop polling
-                stopPollingRef.current = true;
                 if (pollingTimeout) {
                   clearTimeout(pollingTimeout);
                   setPollingTimeout(null);

@@ -5,7 +5,10 @@ import { Button } from '@/components/ui/button';
 import { ErrorPage } from '@/components/ErrorPage';
 import { useErrorHandler } from '@/lib/useErrorHandler';
 import { SplitIcon } from '@/components/icons';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import PlayerCrop from './playerView';
+import TrackView from './trackView';
 
 export type VideoFile = {
   fileName: string;
@@ -29,6 +32,8 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
   const [imagePair, setImagePair] = useState<ImagePair | null>(null);
   const [loading, setLoading] = useState(true); // Start with loading true
   const [suspended, setSuspended] = useState(false);
+  const [imageLoadingStatesA, setImageLoadingStatesA] = useState<boolean[]>([]);
+  const [imageLoadingStatesB, setImageLoadingStatesB] = useState<boolean[]>([]);
 
   const { error, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
@@ -40,6 +45,14 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
   useEffect(() => {
     handleStart();
   }, []);
+
+  // Initialize loading states when imagePair changes
+  useEffect(() => {
+    if (imagePair) {
+      setImageLoadingStatesA(new Array(imagePair.imagesA.length).fill(true));
+      setImageLoadingStatesB(new Array(imagePair.imagesB.length).fill(true));
+    }
+  }, [imagePair]);
 
   const fetchPairForVideo = async (video: VideoFile) => {
     setLoading(true);
@@ -209,73 +222,6 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
     }
   };
 
-  // Helper to render a scrollable image row (fixed height, horizontal scroll only)
-  function ImageRow({ images, refEl, trackId }: { images: string[]; refEl: React.RefObject<HTMLDivElement | null>; trackId?: number }) {
-    if (!images || !Array.isArray(images)) {
-      return (
-        <div
-          ref={refEl}
-          className="rounded-2xl bg-gray-100 shadow p-3 my-4 flex items-center justify-center w-full box-border"
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            flexShrink: 0,
-            height: 200,
-          }}
-        >
-          <span className="text-gray-500">No images available</span>
-        </div>
-      );
-    }
-
-    return (
-      <div
-        ref={refEl}
-        className="rounded-2xl bg-white shadow p-3 my-4 flex gap-2 w-full box-border overflow-x-auto overflow-y-hidden"
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          flexShrink: 0,
-          scrollbarWidth: 'thin',
-          WebkitOverflowScrolling: 'touch',
-          height: 200,
-        }}
-      >
-        {images.map((src, i) => {
-          // Extract crop image name from the URL (e.g., "crop_960.jpg")
-          const urlParts = src.split('/');
-          const cropImageName = urlParts[urlParts.length - 1];
-
-          return (
-            <div key={i} className="relative group">
-              <img
-                src={src}
-                alt="data"
-                loading="lazy"
-                className="h-[180px] object-contain rounded border"
-                style={{ minWidth: 120, maxWidth: 240 }}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm"
-                    onClick={() => handleSplitTrack(trackId!, cropImageName)}
-                    disabled={loading}
-                  >
-                    <SplitIcon className="w-4 h-4 text-gray-700" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Split track here</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <ErrorPage
@@ -361,9 +307,23 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
               </div>
             </div>
           ) : (
-            <div className="transition-opacity duration-300 ease-in-out">
-              <ImageRow images={imagePair.imagesA} refEl={listARef} trackId={imagePair.group1_id} />
-              <ImageRow images={imagePair.imagesB} refEl={listBRef} trackId={imagePair.group2_id} />
+            <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden">
+              <TrackView
+                images={imagePair.imagesA}
+                ref={listARef}
+                trackId={imagePair.group1_id}
+                loadingStates={imageLoadingStatesA}
+                setLoadingStates={setImageLoadingStatesA}
+                onSplit={handleSplitTrack}
+              />
+              <TrackView
+                images={imagePair.imagesB}
+                ref={listBRef}
+                trackId={imagePair.group2_id}
+                loadingStates={imageLoadingStatesB}
+                setLoadingStates={setImageLoadingStatesB}
+                onSplit={handleSplitTrack}
+              />
             </div>
           )}
 
