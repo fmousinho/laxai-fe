@@ -30,18 +30,25 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
         prefix: prefixPath
       });
       
-      // Filter for MP4 video files and convert to public URLs
-      const urls = files
-        .filter((file: any) => {
-          const fileName = file.name.toLowerCase();
-          return fileName.endsWith('.mp4');
-        })
-        .map((file: any) => {
-          return `https://storage.googleapis.com/${bucketName}/${file.name}`;
-        });
+      // Filter for JPG image files and generate signed URLs
+      const signedUrls = await Promise.all(
+        files
+          .filter((file: any) => {
+            const fileName = file.name.toLowerCase();
+            return fileName.endsWith('.jpg') || fileName.endsWith('.jpeg');
+          })
+          .map(async (file: any) => {
+            const [signedUrl] = await file.getSignedUrl({
+              version: 'v4',
+              action: 'read',
+              expires: Date.now() + 60 * 60 * 1000, // 1 hour
+            });
+            return signedUrl;
+          })
+      );
       
-      allUrls.push(...urls);
-      console.log(`Found ${urls.length} videos in ${prefix}`);
+      allUrls.push(...signedUrls);
+      console.log(`Found ${signedUrls.length} images in ${prefix}`);
       
     } catch (error) {
       console.error(`Error listing files for prefix ${prefix}:`, error);

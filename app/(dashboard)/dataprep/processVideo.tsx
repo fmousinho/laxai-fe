@@ -39,17 +39,18 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
     // Extract just the video name from the full GCS path
     // video.fileName might be like "path/imported/video.mp4" or just "video.mp4"
     let processFolder = video.fileName;
-
+    
     // If fileName contains "/imported/", extract just the base name
     if (processFolder.includes('/imported/')) {
       const parts = processFolder.split('/imported/');
       processFolder = parts[parts.length - 1]; // Get the last part (actual filename)
     }
-
+    
+    // Remove .mp4 extension if present (GCS directories drop the extension)
+    processFolder = processFolder.replace(/\.mp4$/i, '');
+    
     // Remove any leading/trailing whitespace and path separators
-    processFolder = processFolder.trim().replace(/^\/+|\/+$/g, '');
-
-    console.log('Original fileName:', video.fileName);
+    processFolder = processFolder.trim().replace(/^\/+|\/+$/g, '');    console.log('Original fileName:', video.fileName);
     console.log('Extracted video_id:', processFolder);
 
     const url = `/api/dataprep/track_pair_for_verification`;
