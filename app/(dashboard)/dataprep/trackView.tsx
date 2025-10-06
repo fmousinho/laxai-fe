@@ -86,7 +86,9 @@ export default function TrackView({
       {images.map((src, i) => {
         console.log(`Rendering image ${i} for track ${trackId}:`, src);
         // Extract crop image name from the URL (e.g., "crop_960.jpg")
-        const urlParts = src.split('/');
+        // First remove query parameters, then get the filename
+        const urlWithoutQuery = src.split('?')[0];
+        const urlParts = urlWithoutQuery.split('/');
         const cropImageName = urlParts[urlParts.length - 1];
 
         return (

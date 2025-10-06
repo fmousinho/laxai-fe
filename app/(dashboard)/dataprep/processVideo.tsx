@@ -54,86 +54,95 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
     }
   }, [imagePair]);
 
-  const fetchPairForVideo = async (video: VideoFile) => {
+  const fetchPair = async () => {
+    await fetchNextVerificationPair();
+  };
+
+  const fetchNextVerificationPair = async () => {
     setLoading(true);
-    clearError(); // Clear any previous errors
-
-    // Extract just the video name from the full GCS path
-    // video.fileName might be like "path/imported/video.mp4" or just "video.mp4"
-    let processFolder = video.fileName;
-    
-    // If fileName contains "/imported/", extract just the base name
-    if (processFolder.includes('/imported/')) {
-      const parts = processFolder.split('/imported/');
-      processFolder = parts[parts.length - 1]; // Get the last part (actual filename)
-    }
-    
-    // Remove .mp4 extension if present (GCS directories drop the extension)
-    processFolder = processFolder.replace(/\.mp4$/i, '');
-    
-    // Remove any leading/trailing whitespace and path separators
-    processFolder = processFolder.trim().replace(/^\/+|\/+$/g, '');    console.log('Original fileName:', video.fileName);
-    console.log('Extracted video_id:', processFolder);
-
-    const url = `/api/dataprep/track_pair_for_verification`;
-    console.log('Fetching pair for video from URL:', url);
+    clearError();
 
     try {
-      const res = await fetch(url, {
+      const res = await fetch("/api/dataprep/next_verification_pair", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ video_id: processFolder }),
       });
-      console.log('Fetch response status:', res.status);
-      const isOk = await handleFetchError(res, 'fetchPairForVideo');
+      console.log('Fetch next verification pair response status:', res.status);
+      const isOk = await handleFetchError(res, 'fetchNextVerificationPair');
       if (!isOk) {
         console.log('Fetch error handled');
         setLoading(false);
         return;
       }
       const data = await res.json();
-      console.log('Received data:', data);
+      console.log('Received next verification pair data:', data);
 
       // Validate the response format
       if (!data || typeof data !== 'object') {
         console.error('Invalid response format - expected object');
-        handleApiError({ message: 'Invalid response format from server' }, 'fetchPairForVideo');
+        handleApiError({ message: 'Invalid response format from server' }, 'fetchNextVerificationPair');
         setLoading(false);
         return;
       }
 
       if (!data.imagesA || !Array.isArray(data.imagesA) || !data.imagesB || !Array.isArray(data.imagesB)) {
         console.error('Invalid response format - expected imagesA and imagesB arrays');
-        handleApiError({ message: 'Server returned invalid image data format' }, 'fetchPairForVideo');
+        handleApiError({ message: 'Server returned invalid image data format' }, 'fetchNextVerificationPair');
         setLoading(false);
         return;
       }
 
       if (data.imagesA.length === 0 || data.imagesB.length === 0) {
-        console.log('No images available for comparison');
+        console.log('No more images available for verification');
         setImagePair(null);
         // Don't show as error, just no data available
       } else {
         setImagePair(data);
       }
     } catch (error) {
-      console.error('Failed to fetch pair:', error);
-      // For network errors, use handleApiError
-      handleApiError(error, 'fetchPairForVideo');
+      console.error('Failed to fetch next verification pair:', error);
+      handleApiError(error, 'fetchNextVerificationPair');
     }
     setLoading(false);
-  };
-
-  const fetchPair = async () => {
-    await fetchPairForVideo(video);
   };
 
   const handleStart = async () => {
     setStarted(true);
     setSuspended(false);
-    await fetchPair();
+    setLoading(true);
+    clearError();
+
+    try {
+      // First, start a verification session
+      const sessionRes = await fetch("/api/dataprep/start_verification_session", {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_id: video.fileName.replace(/\.mp4$/i, '') // Remove .mp4 extension
+        }),
+      });
+
+      const sessionIsOk = await handleFetchError(sessionRes, 'handleStart');
+      if (!sessionIsOk) {
+        setLoading(false);
+        setStarted(false);
+        return;
+      }
+
+      console.log('Verification session started successfully');
+
+      // Then, fetch the first verification pair
+      await fetchNextVerificationPair();
+    } catch (error) {
+      console.error('Failed to start verification session:', error);
+      handleApiError(error, 'handleStart');
+      setLoading(false);
+      setStarted(false);
+    }
   };
 
   const handleClassify = async (label: "same" | "different") => {
@@ -213,8 +222,8 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
 
       console.log('Track split successfully');
 
-      // Then, fetch new verification images
-      await fetchPairForVideo(video);
+      // Then, fetch the next verification pair (without starting a new session)
+      await fetchNextVerificationPair();
     } catch (error) {
       console.error('Failed to split track:', error);
       handleApiError(error, 'handleSplitTrack');

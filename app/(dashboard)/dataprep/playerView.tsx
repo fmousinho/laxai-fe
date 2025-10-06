@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SplitIcon } from '@/components/icons';
 
@@ -73,20 +72,22 @@ export default function PlayerCrop({
 
   return (
     <div className="relative group flex-shrink-0" style={{ width: containerWidth }}>
-      {loading && (
-        <Skeleton
-          className="rounded border"
-          style={{ height, width: containerWidth }}
-        />
-      )}
       <img
         src={src}
         alt="data"
-        className={`object-contain rounded border flex-shrink-0 ${loading ? 'hidden' : ''}`}
+        className="object-contain rounded border flex-shrink-0"
         style={{ height, width: containerWidth }}
         onLoad={handleImageLoad}
         onError={handleImageError}
       />
+      {loading && (
+        <div
+          className="absolute inset-0 rounded border bg-gray-200 animate-pulse flex items-center justify-center"
+          style={{ height, width: containerWidth }}
+        >
+          <div className="text-xs text-gray-500">Loading...</div>
+        </div>
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
