@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Storage } from '@google-cloud/storage';
 import { getTenantId } from '@/lib/gcs-tenant';
 
-// Caching: 1 minute in-memory (per serverless instance), per-tenant
-let cachedMp4: { files: { fileName: string; signedUrl: string; folder: string; fullPath: string }[]; ts: number; prefix: string } | null = null;
-const CACHE_TTL = 60 * 1000;
-
 const bucketName = process.env.GCS_BUCKET_NAME;
 
 const storage = new Storage();
@@ -33,12 +29,6 @@ export async function GET(req: NextRequest) {
     prefix = `${tenantId}/${folder}/`;
   }
 
-  const cacheKey = `${tenantId}-${folder}-videos`;
-  
-  if (cachedMp4 && Date.now() - cachedMp4.ts < CACHE_TTL && cachedMp4.prefix === cacheKey) {
-    return NextResponse.json({ files: cachedMp4.files, cached: true });
-  }
-  
   try {
     // Get files from specified folder
     const [files] = await storage.bucket(bucketName!).getFiles({ prefix });
@@ -69,8 +59,7 @@ export async function GET(req: NextRequest) {
       };
     }));
     
-    cachedMp4 = { files: signedFiles, ts: Date.now(), prefix: cacheKey };
-    return NextResponse.json({ files: signedFiles, cached: false });
+    return NextResponse.json({ files: signedFiles });
   } catch (err) {
     console.error('GCS list error:', err);
     return NextResponse.json({ error: 'Failed to list files' }, { status: 500 });

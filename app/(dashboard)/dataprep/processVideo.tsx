@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from '@/components/ui/button';
 import { ErrorPage } from '@/components/ErrorPage';
 import { useErrorHandler } from '@/lib/useErrorHandler';
@@ -27,7 +27,7 @@ interface ProcessVideoProps {
 export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps) {
   const [started, setStarted] = useState(false);
   const [imagePair, setImagePair] = useState<ImagePair | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading true
   const [suspended, setSuspended] = useState(false);
 
   const { error, handleFetchError, handleApiError, clearError } = useErrorHandler();
@@ -35,6 +35,11 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
   // For lazy loading, track which images are in view (placeholder for now)
   const listARef = useRef<HTMLDivElement>(null);
   const listBRef = useRef<HTMLDivElement>(null);
+
+  // Automatically start loading when component mounts
+  useEffect(() => {
+    handleStart();
+  }, []);
 
   const fetchPairForVideo = async (video: VideoFile) => {
     setLoading(true);
@@ -133,9 +138,7 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
         setLoading(false);
         return;
       }
-      const data = await res.json();
-
-            const responseData = await res.json();
+      const responseData = await res.json();
       
       // Check if we got next images in the response
       if (responseData.next_images) {
@@ -313,13 +316,38 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
         </div>
       </div>
 
-      {!started && !loading && (
-        <button
-          className="px-8 py-4 rounded-full bg-indigo-600 text-white text-xl font-semibold shadow hover:bg-indigo-700 transition"
-          onClick={handleStart}
-        >
-          Start Comparing
-        </button>
+      {!started && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-lg font-medium mb-2">Preparing video for data classification</p>
+            <p className="text-sm text-muted-foreground">Loading track images...</p>
+          </div>
+        </div>
+      )}
+
+      {started && !imagePair && !loading && (
+        <div className="text-center py-8">
+          <div className="mb-4">
+            <div className="text-lg font-medium text-orange-600 mb-2">⏳ Video Not Ready</div>
+            <p className="text-muted-foreground mb-2">This video hasn't been processed for data preparation yet.</p>
+            <p className="text-sm text-muted-foreground">Please ensure the video has been through the analysis pipeline first.</p>
+          </div>
+          <div className="flex gap-3 justify-center">
+            <Button
+              onClick={onBackToList}
+              variant="outline"
+            >
+              Back to Videos
+            </Button>
+            <Button
+              onClick={() => window.open('/uploads', '_blank')}
+              variant="default"
+            >
+              Process Video
+            </Button>
+          </div>
+        </div>
       )}
 
       {started && imagePair && (
