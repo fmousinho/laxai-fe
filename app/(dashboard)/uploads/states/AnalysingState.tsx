@@ -26,6 +26,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownStartedRef = useRef(false);
   const stopPollingRef = useRef(false);
+  const [analysisPhase, setAnalysisPhase] = useState<'initializing' | 'running' | 'completed'>('initializing');
 
   // Helper function to get countdown from localStorage
   const getStoredCountdown = (taskId: string): number | null => {
@@ -86,6 +87,8 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         // Clear localStorage when countdown reaches 0
         if (newCountdown === 0 && uploadState.analysisTaskId) {
           clearStoredCountdown(uploadState.analysisTaskId);
+          // Move to running phase when countdown completes
+          setAnalysisPhase('running');
         }
       }, 1000);
       return () => clearTimeout(timer);
@@ -96,6 +99,8 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
       if (uploadState.analysisTaskId) {
         clearStoredCountdown(uploadState.analysisTaskId);
       }
+      // Move to running phase when countdown completes
+      setAnalysisPhase('running');
     }
   }, [countdown, uploadState.analysisTaskId]);
 
@@ -154,7 +159,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
 
                     // Handle countdown separately to avoid setState during render
           console.log('Countdown ref before check:', countdownStartedRef.current);
-          if ((data.status === 'initializing' || data.status === 'not_started') && !countdownStartedRef.current) {
+          if ((data.status === 'not_started') && !countdownStartedRef.current) {
             console.log('Setting countdown: ref was false, status:', data.status);
             countdownStartedRef.current = true;
             const countdownDuration = 180; // 3 minutes
@@ -171,7 +176,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
             let message = '';
 
             // Create messages based on the new status types
-            if (data.status === 'initializing') {
+            if (data.status === 'not_started') {
               message = 'Setting up analysis services...';
             } else if (data.status === 'running') {
               const framesProcessed = data.frames_processed || 0;
@@ -179,8 +184,10 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
               message = `Processed ${framesProcessed} out of ${totalFrames} frames`;
             } else if (data.status === 'completed') {
               message = 'Analysis completed successfully';
-            } else if (data.status === 'cancelled' || data.status === 'failed') {
+            } else if (data.status === 'cancelled') {
               message = 'Analysis was cancelled';
+            } else if (data.status === 'error') {
+              message = 'Analysis failed with an error';
             } else if (data.message) {
               message = data.message;
             } else if (data.status) {
@@ -198,7 +205,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
             console.log('New progress item:', { message, type: data.status });
 
             switch (data.status) {
-              case 'initializing':
+              case 'not_started':
               case 'running':
                 return { 
                   type: 'analysing' as const, 
@@ -209,13 +216,14 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
                 };
               case 'completed':
                 stopPollingRef.current = true;
+                setAnalysisPhase('completed');
                 return { type: 'analysis_complete' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
               case 'cancelled':
                 stopPollingRef.current = true;
                 return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis cancelled', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
-              case 'failed':
+              case 'error':
                 stopPollingRef.current = true;
-                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis failed', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
+                return { type: 'failed_analysis' as const, videoFile: (prev as Extract<UploadState, { type: 'analysing' }>).videoFile, analysisProgress: newProgress, error: 'Analysis failed with an error', analysisTaskId: (prev as Extract<UploadState, { type: 'analysing' }>).analysisTaskId };
               default:
                 return { 
                   type: 'analysing' as const, 
@@ -315,11 +323,11 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           <div className="flex items-center p-3 rounded-lg border bg-white">
             <div className="flex items-center gap-3 flex-1">
               <div className={`w-3 h-3 rounded-full ${
-                uploadState.status === 'initializing' ? 'bg-yellow-400' :
-                ['running', 'completed'].includes(uploadState.status) ? 'bg-green-500' : 'bg-gray-300'
+                analysisPhase === 'initializing' ? 'bg-yellow-400' :
+                ['running', 'completed'].includes(analysisPhase) ? 'bg-green-500' : 'bg-gray-300'
               }`}></div>
               <span className="text-sm font-medium">Setting up backend services for analysis</span>
-              {uploadState.status === 'initializing' && countdown !== null && (
+              {analysisPhase === 'initializing' && countdown !== null && (
                 <span className="text-sm font-medium text-orange-600 ml-2">
                   ({Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')})
                 </span>
@@ -331,12 +339,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${
-                uploadState.status === 'running' ? 'bg-yellow-400' :
-                uploadState.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
+                analysisPhase === 'running' ? 'bg-yellow-400' :
+                analysisPhase === 'completed' ? 'bg-green-500' : 'bg-gray-300'
               }`}></div>
               <span className="text-sm font-medium">Detecting players</span>
             </div>
-            {uploadState.status === 'running' && uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
+            {analysisPhase === 'running' && uploadState.analysisProgress?.some(msg => msg.message.includes('Processed')) && (
               <span className="text-xs text-blue-600">
                 {(() => {
                   const latestProcessing = uploadState.analysisProgress
