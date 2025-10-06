@@ -4,6 +4,8 @@ import React, { useState, useRef } from "react";
 import { Button } from '@/components/ui/button';
 import { ErrorPage } from '@/components/ErrorPage';
 import { useErrorHandler } from '@/lib/useErrorHandler';
+import { SplitIcon } from '@/components/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export type VideoFile = {
   fileName: string;
@@ -13,6 +15,8 @@ export type VideoFile = {
 type ImagePair = {
   imagesA: string[];
   imagesB: string[];
+  group1_id?: number;
+  group2_id?: number;
 };
 
 interface ProcessVideoProps {
@@ -117,6 +121,7 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
   const handleClassify = async (label: "same" | "different") => {
     setLoading(true);
     clearError(); // Clear any previous errors
+
     try {
       const res = await fetch("/api/dataprep/classify_pair", {
         method: "POST",
@@ -129,11 +134,13 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
         return;
       }
       const data = await res.json();
+
+            const responseData = await res.json();
       
       // Check if we got next images in the response
-      if (data.next_images) {
+      if (responseData.next_images) {
         console.log('Received next images in classify response');
-        setImagePair(data.next_images);
+        setImagePair(responseData.next_images);
       } else {
         console.log('No more images available');
         setImagePair(null);
@@ -143,9 +150,7 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       handleApiError(error, 'handleClassify');
     }
     setLoading(false);
-  };
-
-  const handleSuspend = async () => {
+  };  const handleSuspend = async () => {
     setLoading(true);
     clearError(); // Clear any previous errors
     try {
@@ -167,8 +172,42 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
     setLoading(false);
   };
 
+  const handleSplitTrack = async (trackId: number, cropImageName: string) => {
+    setLoading(true);
+    clearError();
+
+    try {
+      // First, call the split_track API
+      const splitRes = await fetch("/api/dataprep/split_track", {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          track_id: trackId,
+          crop_image_name: cropImageName
+        }),
+      });
+
+      const splitIsOk = await handleFetchError(splitRes, 'handleSplitTrack');
+      if (!splitIsOk) {
+        setLoading(false);
+        return;
+      }
+
+      console.log('Track split successfully');
+
+      // Then, fetch new verification images
+      await fetchPairForVideo(video);
+    } catch (error) {
+      console.error('Failed to split track:', error);
+      handleApiError(error, 'handleSplitTrack');
+      setLoading(false);
+    }
+  };
+
   // Helper to render a scrollable image row (fixed height, horizontal scroll only)
-  function ImageRow({ images, refEl }: { images: string[]; refEl: React.RefObject<HTMLDivElement | null> }) {
+  function ImageRow({ images, refEl, trackId }: { images: string[]; refEl: React.RefObject<HTMLDivElement | null>; trackId?: number }) {
     if (!images || !Array.isArray(images)) {
       return (
         <div
@@ -199,16 +238,37 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
           height: 200,
         }}
       >
-        {images.map((src, i) => (
-          <img
-            key={i}
-            src={src}
-            alt="data"
-            loading="lazy"
-            className="h-[180px] object-contain rounded border"
-            style={{ minWidth: 120, maxWidth: 240 }}
-          />
-        ))}
+        {images.map((src, i) => {
+          // Extract crop image name from the URL (e.g., "crop_960.jpg")
+          const urlParts = src.split('/');
+          const cropImageName = urlParts[urlParts.length - 1];
+
+          return (
+            <div key={i} className="relative group">
+              <img
+                src={src}
+                alt="data"
+                loading="lazy"
+                className="h-[180px] object-contain rounded border"
+                style={{ minWidth: 120, maxWidth: 240 }}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm"
+                    onClick={() => handleSplitTrack(trackId!, cropImageName)}
+                    disabled={loading}
+                  >
+                    <SplitIcon className="w-4 h-4 text-gray-700" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Split track here</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -265,8 +325,19 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       {started && imagePair && (
         <>
           <h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
-          <ImageRow images={imagePair.imagesA} refEl={listARef} />
-          <ImageRow images={imagePair.imagesB} refEl={listBRef} />
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                <p className="text-sm text-muted-foreground">Loading next images...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="transition-opacity duration-300 ease-in-out">
+              <ImageRow images={imagePair.imagesA} refEl={listARef} trackId={imagePair.group1_id} />
+              <ImageRow images={imagePair.imagesB} refEl={listBRef} trackId={imagePair.group2_id} />
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
             <button

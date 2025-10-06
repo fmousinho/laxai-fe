@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getTenantId } from '@/lib/gcs-tenant';
+import { GoogleAuth } from 'google-auth-library';
+
+const BACKEND_URL = process.env.BACKEND_API_URL;
+
+if (!BACKEND_URL) {
+  console.error('BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.');
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    if (!BACKEND_URL) {
+      return NextResponse.json({
+        error: 'Backend API URL not configured',
+        message: 'BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.'
+      }, { status: 500 });
+    }
+
+    const tenantId = await getTenantId(req);
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
+    }
+
+    const { track_id, crop_image_name } = await req.json();
+    if (!track_id || !crop_image_name) {
+      return NextResponse.json({
+        error: 'Missing required fields',
+        message: 'Both track_id and crop_image_name are required'
+      }, { status: 400 });
+    }
+
+    // Validate track_id is a number
+    if (typeof track_id !== 'number' || track_id <= 0) {
+      return NextResponse.json({
+        error: 'Invalid track_id',
+        message: 'track_id must be a positive number'
+      }, { status: 400 });
+    }
+
+    // Validate crop_image_name is a string
+    if (typeof crop_image_name !== 'string' || !crop_image_name.trim()) {
+      return NextResponse.json({
+        error: 'Invalid crop_image_name',
+        message: 'crop_image_name must be a non-empty string'
+      }, { status: 400 });
+    }
+
+    // Authenticate with Google Cloud
+    const auth = new GoogleAuth();
+    const client = await auth.getIdTokenClient(BACKEND_URL!);
+
+    // Make request to backend API
+    const response = await client.request({
+      url: `${BACKEND_URL}/api/v1/dataprep/split-track`,
+      method: 'POST',
+      params: { tenant_id: tenantId },
+      data: {
+        track_id: track_id,
+        crop_image_name: crop_image_name
+      }
+    });
+
+    console.log('Track split successfully:', response.data);
+
+    return NextResponse.json(response.data);
+  } catch (error) {
+    console.error('Error splitting track:', error);
+    return NextResponse.json({ error: 'Failed to split track' }, { status: 500 });
+  }
+}

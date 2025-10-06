@@ -108,7 +108,6 @@ export function Logo() {
   );
 }
 
-
 export function LaxAILogo(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -122,6 +121,28 @@ export function LaxAILogo(props: React.SVGProps<SVGSVGElement>) {
         d="M37.5896 0.25L74.5396 64.25H0.639648L37.5896 0.25Z"
         fill="currentColor"
       ></path>
+    </svg>
+  );
+}
+
+export function SplitIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 3h5v5" />
+      <path d="M8 3H3v5" />
+      <path d="m12 22-4-4 4-4" />
+      <path d="M12 14v8" />
     </svg>
   );
 }
