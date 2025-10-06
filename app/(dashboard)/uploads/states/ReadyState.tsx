@@ -26,16 +26,29 @@ export const ReadyState: React.FC<ReadyStateProps> = ({
         </svg>
         <p className="text-lg font-medium mb-2">Video ready!</p>
         {videoUrl ? (
-          <video
-            src={videoUrl}
-            controls
-            className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
-            style={{ maxWidth: 400 }}
-            onClick={() => setShowModal(true)}
-            onError={(e) => console.error('Video load error:', e)}
-            onLoadStart={() => console.log('Video load started')}
-            onLoadedData={() => console.log('Video data loaded')}
-          />
+          <div className="relative">
+            <video
+              src={videoUrl}
+              controls
+              className="mx-auto max-h-64 rounded-lg border bg-black"
+              style={{ maxWidth: 400 }}
+              onError={(e) => console.error('Video load error:', e)}
+              onLoadStart={() => console.log('Video load started')}
+              onLoadedData={() => console.log('Video data loaded')}
+            />
+            <button
+              onClick={() => setShowModal(true)}
+              className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-2 hover:bg-black/80 transition-colors"
+              aria-label="Expand video"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6"/>
+                <path d="M9 21H3v-6"/>
+                <path d="M21 3l-7 7"/>
+                <path d="M3 21l7-7"/>
+              </svg>
+            </button>
+          </div>
         ) : (
           <div className="text-red-500">Video URL not available</div>
         )}
