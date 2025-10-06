@@ -24,13 +24,13 @@ export const ReadyState: React.FC<ReadyStateProps> = ({
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
           <polyline points="22,4 12,14.01 9,11.01"/>
         </svg>
-        <p className="text-lg font-medium mb-2">Video ready!</p>
+        <p className="text-lg font-medium mb-2">Ready for Analysis</p>
         {videoUrl ? (
           <div className="relative">
             <video
               src={videoUrl}
               controls
-              className="mx-auto max-h-64 rounded-lg border bg-black"
+              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
               style={{ maxWidth: 400 }}
               onError={(e) => console.error('Video load error:', e)}
               onLoadStart={() => console.log('Video load started')}
@@ -38,15 +38,10 @@ export const ReadyState: React.FC<ReadyStateProps> = ({
             />
             <button
               onClick={() => setShowModal(true)}
-              className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-2 hover:bg-black/80 transition-colors"
+              className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded hover:bg-black/80 transition-colors font-medium"
               aria-label="Expand video"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h6v6"/>
-                <path d="M9 21H3v-6"/>
-                <path d="M21 3l-7 7"/>
-                <path d="M3 21l7-7"/>
-              </svg>
+              Expand
             </button>
           </div>
         ) : (
