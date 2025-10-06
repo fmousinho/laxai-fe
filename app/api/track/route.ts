@@ -5,11 +5,18 @@ import { GoogleAuth } from 'google-auth-library';
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
 if (!BACKEND_URL) {
-  throw new Error('BACKEND_API_URL environment variable is not set');
+  console.error('BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.');
 }
 
 export async function POST(req: NextRequest) {
   try {
+    if (!BACKEND_URL) {
+      return NextResponse.json({
+        error: 'Backend API URL not configured',
+        message: 'BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.'
+      }, { status: 500 });
+    }
+
     console.log('Track API called with method:', req.method);
     console.log('Request headers:', Object.fromEntries(req.headers.entries()));
 

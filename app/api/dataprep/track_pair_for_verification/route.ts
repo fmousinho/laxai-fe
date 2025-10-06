@@ -5,7 +5,7 @@ import { GoogleAuth } from 'google-auth-library';
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
 if (!BACKEND_URL) {
-  throw new Error('BACKEND_API_URL environment variable is not set');
+  console.error('BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.');
 }
 
 async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promise<string[]> {
@@ -54,6 +54,13 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
 
 export async function POST(req: NextRequest) {
   try {
+    if (!BACKEND_URL) {
+      return NextResponse.json({
+        error: 'Backend API URL not configured',
+        message: 'BACKEND_API_URL environment variable is not set. Please add it to your .env.local file.'
+      }, { status: 500 });
+    }
+
     const tenantId = await getTenantId(req);
     if (!tenantId) {
       console.log('No tenant ID found');
