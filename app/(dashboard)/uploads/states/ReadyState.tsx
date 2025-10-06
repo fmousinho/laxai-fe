@@ -30,7 +30,7 @@ export const ReadyState: React.FC<ReadyStateProps> = ({
             <video
               src={videoUrl}
               controls
-              className="mx-auto max-h-64 rounded-lg border bg-black cursor-pointer"
+              className="mx-auto max-h-64 rounded-lg border bg-black"
               style={{ maxWidth: 400 }}
               onError={(e) => console.error('Video load error:', e)}
               onLoadStart={() => console.log('Video load started')}
@@ -47,13 +47,12 @@ export const ReadyState: React.FC<ReadyStateProps> = ({
         ) : (
           <div className="text-red-500">Video URL not available</div>
         )}
-        {showModal && (
+        {showModal && videoUrl && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowModal(false)}>
             <div className="relative" onClick={e => e.stopPropagation()}>
               <video
-                src={videoUrl!}
+                src={videoUrl}
                 controls
-                autoPlay
                 className="rounded-lg border bg-black shadow-2xl"
                 style={{ maxWidth: '90vw', maxHeight: '80vh' }}
               />

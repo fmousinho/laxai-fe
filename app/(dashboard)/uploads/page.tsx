@@ -23,32 +23,29 @@ export default function Uploads() {
   const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(true);
   
   // Unified state management with persistence
-  const [uploadState, setUploadState] = useState<UploadState>(() => {
-    // Try to restore from sessionStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('uploadState');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          // Validate that it's a valid UploadState
-          if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-            return parsed as UploadState;
-          }
+  const [uploadState, setUploadState] = useState<UploadState>({ type: 'initial' });
+
+  // Restore state from sessionStorage after mount (avoiding hydration mismatch)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('uploadState');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate that it's a valid UploadState
+        if (parsed && typeof parsed === 'object' && 'type' in parsed) {
+          setUploadState(parsed as UploadState);
         }
-      } catch (e) {
-        console.warn('Failed to parse saved upload state, using default:', e);
-        // Clear corrupted data
-        sessionStorage.removeItem('uploadState');
       }
+    } catch (e) {
+      console.warn('Failed to parse saved upload state, using default:', e);
+      // Clear corrupted data
+      sessionStorage.removeItem('uploadState');
     }
-    return { type: 'initial' };
-  });
+  }, []);
 
   // Persist state changes to sessionStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('uploadState', JSON.stringify(uploadState));
-    }
+    sessionStorage.setItem('uploadState', JSON.stringify(uploadState));
   }, [uploadState]);
 
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
