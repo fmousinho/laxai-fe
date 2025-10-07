@@ -222,7 +222,6 @@ export default function Uploads() {
         setUploadState(prev => ({
           type: 'failed_analysis',
           videoFile: (prev as Extract<UploadState, { type: 'analysing'; }>).videoFile,
-          analysisProgress: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisProgress,
           error: 'Analysis request failed',
           analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId
         }));
@@ -233,8 +232,6 @@ export default function Uploads() {
       setUploadState(prev => ({
         type: 'analysing',
         videoFile: (prev as Extract<UploadState, { type: 'analysing'; }>).videoFile,
-        status: 'running' as const,
-        analysisProgress: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisProgress,
         analysisTaskId: data.task_id
       }));
     } catch (error) {
@@ -243,7 +240,6 @@ export default function Uploads() {
       setUploadState(prev => ({
         type: 'failed_analysis',
         videoFile: (prev as Extract<UploadState, { type: 'analysing'; }>).videoFile,
-        analysisProgress: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisProgress,
         error: 'Failed to start analysis',
         analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId
       }));
@@ -320,7 +316,7 @@ export default function Uploads() {
           return (
             <FailedAnalysisState
               uploadState={uploadState as Extract<UploadState, { type: 'failed_analysis' }>}
-              onRetry={() => setUploadState({ type: 'initial' })}
+              onReset={() => setUploadState({ type: 'initial' })}
             />
           );
 

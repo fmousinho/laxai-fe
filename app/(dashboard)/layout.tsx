@@ -9,7 +9,6 @@ import {
   Settings,
   ShoppingCart,
   Upload,
-  Users2,
   Combine
 } from 'lucide-react';
 
@@ -86,10 +85,6 @@ function DesktopNav() {
           <Package className="h-5 w-5" />
         </NavItem>
 
-        <NavItem href="/customers" label="Customers">
-          <Users2 className="h-5 w-5" />
-        </NavItem>
-
         <NavItem href="#" label="Analytics">
           <LineChart className="h-5 w-5" />
         </NavItem>
@@ -159,26 +154,26 @@ function MobileNav() {
             <Package className="h-5 w-5" />
             Products
           </Link>
-          <Link
-            href="#"
-            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <Users2 className="h-5 w-5" />
-            Customers
-          </Link>
             <Link
-            href="#"
-            className="flex items-center gap-4 px-2.5 text-foreground"
-          >
-            <Package className="h-5 w-5" />
-            Uploads
-          </Link>
-          <Link
             href="#"
             className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
           >
             <LineChart className="h-5 w-5" />
-            Settings
+            Analytics
+          </Link>
+          <Link
+            href="/dataprep"
+            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
+          >
+            <Combine className="h-5 w-5" />
+            Data Prep
+          </Link>
+          <Link
+            href="/uploads"
+            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
+          >
+            <Upload className="h-5 w-5" />
+            Uploads
           </Link>
         </nav>
       </SheetContent>
@@ -194,7 +189,6 @@ function DashboardBreadcrumb() {
       '/': 'Dashboard',
       '/dataprep': 'Data Prep',
       '/uploads': 'Uploads',
-      '/customers': 'Customers',
       // Add more as needed
     };
     return pageMap[path] || 'Page';
