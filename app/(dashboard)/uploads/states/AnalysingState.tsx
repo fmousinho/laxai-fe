@@ -4,6 +4,8 @@ import { UploadState, AnalysingSubstateType } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Clock, Circle, Loader2 } from 'lucide-react';
+import { set } from "zod";
+import { clear } from "console";
 
 // State machine types
 
@@ -18,13 +20,15 @@ const POLLING_INTERVAL = 5000; // 5 seconds
 
 export function AnalysingState({ uploadState, setUploadState }: AnalysingStateProps) {
   const [showModal, setShowModal] = useState(false);
-  const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [analysingSubstate, setAnalysingSubstate] = useState<AnalysingSubstateType | null>('not_started');
   const [shouldPoll, setShouldPoll] = useState(false);
   const [framesProcessed, setFramesProcessed] = useState<number>(0);
   const [totalFrames, setTotalFrames] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Use ref to track polling state to avoid closure issues
+  const shouldPollRef = useRef(false);
 
 
   const getStoredSubstate = (): AnalysingSubstateType | null => {
@@ -113,8 +117,10 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     switch (analysingSubstate) {
 
       case 'not_started':
+        storeSubstate('not_started');
         if (uploadState.analysisTaskId) {
           setShouldPoll(true);
+          shouldPollRef.current = true;
           const storedCountdown = getStoredCountdown(uploadState.analysisTaskId);
           if (storedCountdown) {
             setCountdown(storedCountdown);
@@ -124,14 +130,19 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           }
         } else {
           setShouldPoll(false);
+          shouldPollRef.current = false;
         }
         break;
       case 'running':
+        storeSubstate('running');
         setShouldPoll(true);
+        shouldPollRef.current = true;
         setCountdown(null);
         break;
       case 'completed':
-        setShouldPoll(false); // Stop polling when analysis is complete
+        clearStoredSubstate();
+        setShouldPoll(false);
+        shouldPollRef.current = false;
         setUploadState({
           type: 'analysis_complete',
           videoFile: uploadState.videoFile, // Assuming prev state has this
@@ -139,7 +150,9 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         });
         break;
       case 'error':
-        setShouldPoll(false); // Stop polling on error
+        clearStoredSubstate();
+        setShouldPoll(false);
+        shouldPollRef.current = false;
         setUploadState({
           type: "failed_analysis",
           videoFile: uploadState.videoFile, // Assuming prev state has this
@@ -148,10 +161,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         });
         break;
       case 'cancelled':
-        setShouldPoll(false); // Stop polling when cancelled
-          setUploadState({
-            type: "failed_analysis",
-            videoFile: uploadState.videoFile, // Assuming prev state has this
+        clearStoredSubstate();
+        setShouldPoll(false);
+        shouldPollRef.current = false;
+        setUploadState({
+          type: "failed_analysis",
+          videoFile: uploadState.videoFile, // Assuming prev state has this
           analysisTaskId: uploadState.analysisTaskId!,
           error: "Analysis cancelled"
         });
@@ -159,28 +174,56 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
   }, [analysingSubstate, uploadState.analysisTaskId]);
 
-  // Polling effect
+  // Polling effect - simplified to prevent multiple concurrent polls
   useEffect(() => {
-    if (shouldPoll && uploadState.analysisTaskId) {
-      const poll = async () => {
-        await pollProgress(uploadState.analysisTaskId);
-        const timeout = setTimeout(poll, POLLING_INTERVAL);
-        setPollingTimeout(timeout);
-      };
+    let timeoutId: NodeJS.Timeout | null = null;
 
-      poll();
-    }
-    return () => {
-      if (pollingTimeout) {
-        clearTimeout(pollingTimeout);
-        setPollingTimeout(null);
+    const startPolling = () => {
+      if (shouldPoll && uploadState.analysisTaskId && !timeoutId) {
+        const poll = async () => {
+          if (!shouldPollRef.current) {
+            return; // Stop if polling should be disabled
+          }
+
+          await pollProgress(uploadState.analysisTaskId);
+
+          // Schedule next poll only if we should continue polling
+          if (shouldPollRef.current) {
+            timeoutId = setTimeout(poll, POLLING_INTERVAL);
+          } else {
+            timeoutId = null;
+          }
+        };
+
+        // Start the first poll
+        poll();
       }
     };
-  }, [shouldPoll]);
+
+    const stopPolling = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    if (shouldPoll && uploadState.analysisTaskId) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+
+    return stopPolling;
+  }, [shouldPoll, uploadState.analysisTaskId]);
 
   
   // Function to poll progress updates
   const pollProgress = async (taskId: string) => {
+    // Don't poll if we shouldn't be polling anymore (use ref to avoid closure issues)
+    if (!shouldPollRef.current) {
+      return;
+    }
+
     try {
       console.log('Polling progress for task:', taskId);
       const response = await fetch(`/api/track/${taskId}/progress`);
@@ -208,6 +251,16 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
       setAnalysingSubstate('error');
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear stored countdown
+      if (uploadState.analysisTaskId) {
+        clearStoredCountdown(uploadState.analysisTaskId);
+      }
+    };
+  }, [uploadState.analysisTaskId]);
 
   return (
     <div className="mt-6 text-center flex flex-col items-center gap-4">
@@ -330,10 +383,8 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
               if (response.ok) {
                 console.log('Analysis cancelled successfully');
                 // Stop polling
-                if (pollingTimeout) {
-                  clearTimeout(pollingTimeout);
-                  setPollingTimeout(null);
-                }
+                setShouldPoll(false);
+                shouldPollRef.current = false;
                 // Clear countdown from localStorage
                 clearStoredCountdown(uploadState.analysisTaskId);
                 // Update state to cancelled status

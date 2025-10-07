@@ -1,10 +1,11 @@
 "use client";
 import React from 'react';
 import { UploadComponent } from '../UploadComponent';
+import { UploadState } from '../types';
 
 interface InitialStateProps {
-  uploadState: any;
-  setUploadState: React.Dispatch<React.SetStateAction<any>>;
+  uploadState: UploadState;
+  setUploadState: React.Dispatch<React.SetStateAction<UploadState>>;
   onUploadComplete: (signedUrl: string, fileName: string) => void;
   onUploadStart: () => void;
   onUploadError: (error: string) => void;
