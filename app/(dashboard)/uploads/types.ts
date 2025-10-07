@@ -29,12 +29,6 @@ export interface VideoFile {
   created?: string;
 }
 
-export interface AnalysisProgressItem {
-  message: string;
-  timestamp: string;
-  type: AnalysingSubstateType;
-}
-
 export interface AnalysisRunningData {
   total_frames?: number;
   processed_frames: number;
@@ -47,25 +41,13 @@ export interface UploadingState {
 }
 
 
-
-export interface AnalysingState {
-  type: 'analysing';
-  videoFile: VideoFile;
-  status: AnalysingSubstateType;
-  analysisTaskId: string;
-  analysisProgress: AnalysisProgressItem[];
-};
-
-
-
-
 export type UploadState =
   | { type: 'initial' }
   | UploadingState
   | { type: 'preparing'; videoFile: VideoFile }
   | { type: 'ready'; videoFile: VideoFile }
-  | AnalysingState
-  | { type: 'analysis_complete'; videoFile: VideoFile; analysisProgress: AnalysisProgressItem[]; analysisTaskId: string }
+  | { type: 'analysing'; videoFile: VideoFile; analysisTaskId: string }
+  | { type: 'analysis_complete'; videoFile: VideoFile; analysisTaskId: string }
   | { type: 'failed_upload'; videoFile?: VideoFile; error: string }
-  | { type: 'failed_analysis'; videoFile: VideoFile; analysisProgress: AnalysisProgressItem[]; error: string; analysisTaskId: string }
+  | { type: 'failed_analysis'; videoFile: VideoFile; error: string; analysisTaskId: string }
   | { type: 'deleting'; videoFile: VideoFile };
