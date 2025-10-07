@@ -40,9 +40,9 @@ export async function GET(req: NextRequest) {
     // Make request to backend API for listing tracking jobs
     let response;
     try {
-      console.log('Making request to:', `${BACKEND_URL}/api/v1/tracking-jobs`);
+      console.log('Making request to:', `${BACKEND_URL}/`);
       response = await client.request({
-        url: `${BACKEND_URL}/api/v1/tracking-jobs`,
+        url: `${BACKEND_URL}/api/v1/track/`,
         method: 'GET',
         params: {
           tenant_id: effectiveTenantId,
