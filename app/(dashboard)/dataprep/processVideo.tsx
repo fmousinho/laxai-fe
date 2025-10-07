@@ -13,6 +13,7 @@ import TrackView from './trackView';
 export type VideoFile = {
   fileName: string;
   signedUrl: string;
+  thumbnailUrl?: string;
 };
 
 type ImagePair = {
@@ -46,13 +47,42 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
     handleStart();
   }, []);
 
-  // Initialize loading states when imagePair changes
+  // Monitor for empty dataprep groups and log errors
   useEffect(() => {
-    if (imagePair) {
-      setImageLoadingStatesA(new Array(imagePair.imagesA.length).fill(true));
-      setImageLoadingStatesB(new Array(imagePair.imagesB.length).fill(true));
+    if (started && !loading) {
+      if (!imagePair) {
+        console.error('🚨 DATAPREP GROUP ERROR: No image pair available for verification', {
+          video: video.fileName,
+          started,
+          loading,
+          suspended,
+          timestamp: new Date().toISOString(),
+          troubleshooting: 'This indicates the video has not been processed or all verification pairs have been exhausted'
+        });
+      } else {
+        if (!imagePair.imagesA || imagePair.imagesA.length === 0) {
+          console.error('🚨 DATAPREP GROUP ERROR: Group A (imagesA) is empty', {
+            video: video.fileName,
+            group1_id: imagePair.group1_id,
+            imagesA_length: imagePair.imagesA?.length || 0,
+            imagesB_length: imagePair.imagesB?.length || 0,
+            timestamp: new Date().toISOString(),
+            troubleshooting: 'Group A has no images to display. Check if track splitting or image extraction failed.'
+          });
+        }
+        if (!imagePair.imagesB || imagePair.imagesB.length === 0) {
+          console.error('🚨 DATAPREP GROUP ERROR: Group B (imagesB) is empty', {
+            video: video.fileName,
+            group2_id: imagePair.group2_id,
+            imagesA_length: imagePair.imagesA?.length || 0,
+            imagesB_length: imagePair.imagesB?.length || 0,
+            timestamp: new Date().toISOString(),
+            troubleshooting: 'Group B has no images to display. Check if track splitting or image extraction failed.'
+          });
+        }
+      }
     }
-  }, [imagePair]);
+  }, [started, loading, imagePair, video.fileName]);
 
   const fetchPair = async () => {
     await fetchNextVerificationPair();
@@ -88,6 +118,16 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       }
 
       if (!data.imagesA || !Array.isArray(data.imagesA) || !data.imagesB || !Array.isArray(data.imagesB)) {
+        console.error('🚨 DATAPREP API ERROR: Invalid API response format', {
+          video: video.fileName,
+          hasImagesA: !!data.imagesA,
+          imagesA_isArray: Array.isArray(data.imagesA),
+          hasImagesB: !!data.imagesB,
+          imagesB_isArray: Array.isArray(data.imagesB),
+          fullResponse: data,
+          timestamp: new Date().toISOString(),
+          troubleshooting: 'The API response does not contain valid imagesA and imagesB arrays. Check the backend API implementation.'
+        });
         console.error('Invalid response format - expected imagesA and imagesB arrays');
         handleApiError({ message: 'Server returned invalid image data format' }, 'fetchNextVerificationPair');
         setLoading(false);
@@ -95,6 +135,16 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       }
 
       if (data.imagesA.length === 0 || data.imagesB.length === 0) {
+        console.error('🚨 DATAPREP API ERROR: API returned empty image groups', {
+          video: video.fileName,
+          imagesA_length: data.imagesA.length,
+          imagesB_length: data.imagesB.length,
+          group1_id: data.group1_id,
+          group2_id: data.group2_id,
+          fullResponse: data,
+          timestamp: new Date().toISOString(),
+          troubleshooting: 'The API returned verification pairs but one or both groups are empty. This may indicate incomplete track processing or data corruption.'
+        });
         console.log('No more images available for verification');
         setImagePair(null);
         // Don't show as error, just no data available

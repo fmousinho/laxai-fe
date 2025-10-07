@@ -54,6 +54,15 @@ export default function TrackView({
   console.log('TrackView for track', trackId, 'has', images?.length || 0, 'images');
 
   if (!images || !Array.isArray(images) || images.length === 0) {
+    console.error('🚨 DATAPREP TRACKVIEW ERROR: TrackView received empty or invalid images array', {
+      trackId,
+      imagesType: typeof images,
+      isArray: Array.isArray(images),
+      imagesLength: images?.length || 0,
+      imagesValue: images,
+      timestamp: new Date().toISOString(),
+      troubleshooting: 'This track has no images to display. Check if image extraction or track processing failed for this track.'
+    });
     return (
       <div
         ref={ref}

@@ -27,6 +27,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   const [pollingTimeout, setPollingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [currentProgressStatus, setCurrentProgressStatus] = useState<AnalysingSubstateType | null>(null);
+  const previousStatusRef = useRef<AnalysingSubstateType | null>(null);
 
   // Helper function to get countdown from localStorage
   const getStoredCountdown = (taskId: string): number | null => {
@@ -121,6 +122,13 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
   }, [uploadState.type, uploadState.analysisTaskId, pollingTimeout]);
 
+  // Sync currentProgressStatus with uploadState.status
+  useEffect(() => {
+    if (uploadState.type === 'analysing') {
+      setCurrentProgressStatus(uploadState.status);
+    }
+  }, [uploadState.type, uploadState.status]);
+
   // Determine if we should be polling
   const shouldPoll = uploadState.type === 'analysing' && 
                      (currentProgressStatus === null || currentProgressStatus === 'not_started' || currentProgressStatus === 'running');
@@ -134,17 +142,19 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
       if (response.status === 200) {
         const data = await response.json();
         console.log('Polled progress data:', data);
-
-        // Update current progress status
-        setCurrentProgressStatus(data.status);
+        console.log('Previous status:', currentProgressStatus, 'New status:', data.status);
 
         // Handle countdown for not_started status
-        if (data.status === 'not_started' && countdown === null) {
+        if (data.status === 'not_started' && countdown === null && previousStatusRef.current !== 'not_started') {
+          console.log('Starting/restarting countdown for not_started status (from:', previousStatusRef.current, ')');
           const countdownDuration = 180; // 3 minutes
           setCountdown(countdownDuration);
           storeCountdown(taskId, countdownDuration);
-        } else if (data.status !== 'not_started' && countdown !== null) {
-          // Clear countdown when status changes away from not_started
+        }
+        // Only clear countdown when analysis actually starts running or completes
+        // Don't clear it if status fluctuates back to not_started
+        else if ((data.status === 'running' || data.status === 'completed' || data.status === 'error' || data.status === 'cancelled') && countdown !== null) {
+          console.log('Clearing countdown - status changed to:', data.status);
           setCountdown(null);
           clearStoredCountdown(taskId);
         }
@@ -204,6 +214,9 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
               };
           }
         });
+
+        // Update previous status for countdown logic
+        previousStatusRef.current = data.status;
 
         return data.status;
       } else if (response.status === 404) {
@@ -291,18 +304,18 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           <div className="flex items-center justify-between p-3 rounded-lg border bg-white">
             <div className="flex items-center gap-3 flex-1">
               {currentProgressStatus === null || currentProgressStatus === 'not_started' ? (
-                <Circle className="w-4 h-4 text-muted-foreground" />
-              ) : currentProgressStatus === 'running' ? (
                 <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-              ) : (
+              ) : currentProgressStatus === 'running' || currentProgressStatus === 'completed' ? (
                 <CheckCircle className="w-4 h-4 text-green-600" />
+              ) : (
+                <Circle className="w-4 h-4 text-muted-foreground" />
               )}
               <span className="text-sm font-medium">Setting up backend services for analysis</span>
             </div>
             {currentProgressStatus === 'not_started' && countdown !== null && (
-              <Badge variant="secondary" className="text-orange-600 border-orange-200">
+              <Badge variant="outline" className="text-blue-600 border-blue-200">
                 <Clock className="w-3 h-3 mr-1" />
-                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+                {`${Math.floor(countdown / 60)}:${(countdown % 60).toString().padStart(2, '0')}`}
               </Badge>
             )}
           </div>
@@ -328,7 +341,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
                   if (latestProcessing) {
                     const match = latestProcessing.message.match(/Processed (\d+) out of (\d+)/);
                     if (match) {
-                      return `${match[1]} of ${match[2]}`;
+                      return `${match[1]} of ${match[2]} frames`;
                     }
                   }
                   return '';

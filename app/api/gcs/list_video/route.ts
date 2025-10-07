@@ -37,8 +37,11 @@ export async function GET(req: NextRequest) {
     const mp4Files = files
       .filter(f => f.name.endsWith('.mp4') && !f.name.endsWith('/'));
     
-    // Generate signed URLs for each file
-    const signedFiles = await Promise.all(mp4Files.map(async (f) => {
+    // Generate signed URLs for each file (limit to first 20 for performance)
+    const maxFiles = 20;
+    const limitedFiles = mp4Files.slice(0, maxFiles);
+    
+    const signedFiles = await Promise.all(limitedFiles.map(async (f) => {
       const [signedUrl] = await f.getSignedUrl({
         version: 'v4',
         action: 'read',
@@ -51,15 +54,40 @@ export async function GET(req: NextRequest) {
       // Get the folder path (everything except the filename)
       const rightFolder = f.name.replace(fileName, '');
 
+      // Try to get thumbnail URL (don't fail if thumbnail doesn't exist)
+      let thumbnailUrl = null;
+      try {
+        const cleanVideoId = fileName.replace(/\.mp4$/, '');
+        const thumbnailPath = `${tenantId}/${cleanVideoId}/thumbnail.jpg`;
+        const thumbnailFile = storage.bucket(bucketName!).file(thumbnailPath);
+        const [thumbnailExists] = await thumbnailFile.exists();
+        if (thumbnailExists) {
+          const [thumbSignedUrl] = await thumbnailFile.getSignedUrl({
+            version: 'v4',
+            action: 'read',
+            expires: Date.now() + 60 * 60 * 1000, // 1 hour expiry for thumbnails
+          });
+          thumbnailUrl = thumbSignedUrl;
+        }
+      } catch (thumbError) {
+        // Silently ignore thumbnail errors - thumbnails are optional
+        console.log(`Thumbnail not available for ${fileName}:`, thumbError);
+      }
+
       return {
         fileName: fileName,
         signedUrl: signedUrl,
+        thumbnailUrl: thumbnailUrl,
         folder: rightFolder,
         fullPath: f.name
       };
     }));
     
-    return NextResponse.json({ files: signedFiles });
+    return NextResponse.json({ 
+      files: signedFiles, 
+      totalFiles: mp4Files.length,
+      hasMore: mp4Files.length > maxFiles 
+    });
   } catch (err) {
     console.error('GCS list error:', err);
     return NextResponse.json({ error: 'Failed to list files' }, { status: 500 });
