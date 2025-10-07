@@ -41,23 +41,36 @@ export async function GET(req: NextRequest) {
     const maxFiles = 20;
     const limitedFiles = mp4Files.slice(0, maxFiles);
     
-    const signedFiles = await Promise.all(limitedFiles.map(async (f) => {
+    // Generate video signed URLs first (these are required)
+    const signedFilesPromises = limitedFiles.map(async (f) => {
       const [signedUrl] = await f.getSignedUrl({
         version: 'v4',
         action: 'read',
         expires: Date.now() + 10 * 60 * 1000, // 10 min expiry
       });
 
-            // Extract just the filename (everything after the last /)
+      // Extract just the filename (everything after the last /)
       const fileName = f.name.split('/').pop() || '';
 
       // Get the folder path (everything except the filename)
       const rightFolder = f.name.replace(fileName, '');
 
-      // Try to get thumbnail URL (don't fail if thumbnail doesn't exist)
-      let thumbnailUrl = null;
+      return {
+        fileName: fileName,
+        signedUrl: signedUrl,
+        folder: rightFolder,
+        fullPath: f.name,
+        thumbnailUrl: null as string | null // Will be set below if available
+      };
+    });
+
+    // Wait for all video URLs to be generated
+    const signedFiles = await Promise.all(signedFilesPromises);
+    
+    // Now check for thumbnails in parallel (but don't block on them)
+    const thumbnailPromises = signedFiles.map(async (file, index) => {
       try {
-        const cleanVideoId = fileName.replace(/\.mp4$/, '');
+        const cleanVideoId = file.fileName.replace(/\.mp4$/, '');
         const thumbnailPath = `${tenantId}/${cleanVideoId}/thumbnail.jpg`;
         const thumbnailFile = storage.bucket(bucketName!).file(thumbnailPath);
         const [thumbnailExists] = await thumbnailFile.exists();
@@ -67,23 +80,18 @@ export async function GET(req: NextRequest) {
             action: 'read',
             expires: Date.now() + 60 * 60 * 1000, // 1 hour expiry for thumbnails
           });
-          thumbnailUrl = thumbSignedUrl;
+          signedFiles[index].thumbnailUrl = thumbSignedUrl;
         }
       } catch (thumbError) {
         // Silently ignore thumbnail errors - thumbnails are optional
-        console.log(`Thumbnail not available for ${fileName}:`, thumbError);
+        console.log(`Thumbnail not available for ${file.fileName}:`, thumbError);
       }
+    });
 
-      return {
-        fileName: fileName,
-        signedUrl: signedUrl,
-        thumbnailUrl: thumbnailUrl,
-        folder: rightFolder,
-        fullPath: f.name
-      };
-    }));
-    
-    return NextResponse.json({ 
+    // Don't wait for thumbnails - let them load asynchronously
+    Promise.all(thumbnailPromises).catch(err => 
+      console.log('Some thumbnails failed to load:', err)
+    );    return NextResponse.json({ 
       files: signedFiles, 
       totalFiles: mp4Files.length,
       hasMore: mp4Files.length > maxFiles 

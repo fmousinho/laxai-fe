@@ -17,7 +17,11 @@ interface TrackingJobsResponse {
   count: number;
 }
 
-export function TrackingJobsList() {
+interface TrackingJobsListProps {
+  isActive?: boolean;
+}
+
+export function TrackingJobsList({ isActive = false }: TrackingJobsListProps) {
   const [jobs, setJobs] = useState<TrackingJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +46,11 @@ export function TrackingJobsList() {
   };
 
   useEffect(() => {
-    fetchTrackingJobs();
-  }, []);
+    // Only fetch if this tab is active
+    if (isActive) {
+      fetchTrackingJobs();
+    }
+  }, [isActive]);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status.toLowerCase()) {
