@@ -181,7 +181,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     const startPolling = () => {
       if (shouldPoll && uploadState.analysisTaskId && !timeoutId) {
         const poll = async () => {
-          if (!shouldPollRef.current) {
+          if (!shouldPollRef.current || uploadState.type !== 'analysing') {
             return; // Stop if polling should be disabled
           }
 

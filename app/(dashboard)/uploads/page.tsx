@@ -38,7 +38,7 @@ export default function Uploads() {
       }
     } catch (e) {
       console.warn('Failed to parse saved upload state, using default:', e);
-      // Clear corrupted data
+      // Clear corrupted dataAnaly
       sessionStorage.removeItem('uploadState');
     }
   }, []);
