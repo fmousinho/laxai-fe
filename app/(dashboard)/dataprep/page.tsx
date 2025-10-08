@@ -5,11 +5,12 @@ import ListVideos, { VideoFile } from './listVideos';
 import ProcessVideo from './processVideo';
 import { TrackViewDemo } from './trackView';
 import { TrackingJobsList } from './trackingJobs';
+import ClassificationComplete from './classificationComplete';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
 export default function DataPrepPage() {
-  const [view, setView] = useState<'list' | 'process' | 'demo' | 'tracking'>('list');
+  const [view, setView] = useState<'list' | 'process' | 'demo' | 'tracking' | 'classificationComplete'>('list');
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -20,6 +21,11 @@ export default function DataPrepPage() {
 
   const handleBackToList = () => {
     setView('list');
+    setSelectedVideo(null);
+  };
+
+  const handleClassificationComplete = () => {
+    setView('classificationComplete');
     setSelectedVideo(null);
   };
 
@@ -52,6 +58,12 @@ export default function DataPrepPage() {
         >
           Tracking Jobs
         </Button>
+        <Button
+          variant={view === 'classificationComplete' ? 'default' : 'outline'}
+          onClick={() => handleViewChange('classificationComplete')}
+        >
+          Classification Complete
+        </Button>
       </div>
 
       {isLoading ? (
@@ -62,11 +74,13 @@ export default function DataPrepPage() {
       ) : view === 'list' ? (
         <ListVideos onPrepareVideo={handlePrepareVideo} />
       ) : view === 'process' ? (
-        selectedVideo && <ProcessVideo video={selectedVideo} onBackToList={handleBackToList} />
+        selectedVideo && <ProcessVideo video={selectedVideo} onBackToList={handleBackToList} onClassificationComplete={handleClassificationComplete} />
       ) : view === 'demo' ? (
         <TrackViewDemo />
       ) : view === 'tracking' ? (
         <TrackingJobsList isActive={view === 'tracking'} />
+      ) : view === 'classificationComplete' ? (
+        <ClassificationComplete onBackToList={handleBackToList} />
       ) : (
         <TrackViewDemo />
       )}

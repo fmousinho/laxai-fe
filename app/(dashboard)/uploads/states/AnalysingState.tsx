@@ -335,7 +335,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         console.log('Polled progress data:', data);
         if (data.status) {
           setAnalysingSubstate(data.status as AnalysingSubstateType);
-          if (data.status === 'running') {
+          if (data.status === 'running' || data.status === 'completed') {
             const processedFrames = data.frames_processed || 0;
             const totalFramesValue = data.total_frames || null;
             setFramesProcessed(processedFrames);

@@ -26,9 +26,10 @@ type ImagePair = {
 interface ProcessVideoProps {
   video: VideoFile;
   onBackToList: () => void;
+  onClassificationComplete: () => void;
 }
 
-export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps) {
+export default function ProcessVideo({ video, onBackToList, onClassificationComplete }: ProcessVideoProps) {
   const [started, setStarted] = useState(false);
   const [imagePair, setImagePair] = useState<ImagePair | null>(null);
   const [loading, setLoading] = useState(true); // Start with loading true
@@ -103,6 +104,12 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       const isOk = await handleFetchError(res, 'fetchNextVerificationPair');
       if (!isOk) {
         console.log('Fetch error handled');
+        // Check if this is a 404 - which means no more verification pairs available
+        if (res.status === 404) {
+          console.log('Classification complete - no more verification pairs available (404)');
+          onClassificationComplete();
+          return;
+        }
         setLoading(false);
         return;
       }
@@ -135,19 +142,9 @@ export default function ProcessVideo({ video, onBackToList }: ProcessVideoProps)
       }
 
       if (data.imagesA.length === 0 || data.imagesB.length === 0) {
-        console.error('🚨 DATAPREP API ERROR: API returned empty image groups', {
-          video: video.fileName,
-          imagesA_length: data.imagesA.length,
-          imagesB_length: data.imagesB.length,
-          group1_id: data.group1_id,
-          group2_id: data.group2_id,
-          fullResponse: data,
-          timestamp: new Date().toISOString(),
-          troubleshooting: 'The API returned verification pairs but one or both groups are empty. This may indicate incomplete track processing or data corruption.'
-        });
-        console.log('No more images available for verification');
-        setImagePair(null);
-        // Don't show as error, just no data available
+        console.log('Classification complete - no more images available for verification');
+        onClassificationComplete();
+        return;
       } else {
         setImagePair(data);
       }
