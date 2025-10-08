@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from 'next/navigation';
 import ListVideos, { VideoFile } from './listVideos';
 import ProcessVideo from './processVideo';
 import { TrackViewDemo } from './trackView';
@@ -13,6 +14,23 @@ export default function DataPrepPage() {
   const [view, setView] = useState<'list' | 'process' | 'demo' | 'tracking' | 'classificationComplete'>('list');
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const searchParams = useSearchParams();
+
+  // Handle URL parameters for auto-starting video processing
+  useEffect(() => {
+    const fileName = searchParams.get('fileName');
+    const signedUrl = searchParams.get('signedUrl');
+    const autoStart = searchParams.get('autoStart');
+
+    if (fileName && signedUrl && autoStart === 'true') {
+      const video: VideoFile = {
+        fileName,
+        signedUrl
+      };
+      setSelectedVideo(video);
+      setView('process');
+    }
+  }, [searchParams]);
 
   const handlePrepareVideo = (video: VideoFile) => {
     setSelectedVideo(video);

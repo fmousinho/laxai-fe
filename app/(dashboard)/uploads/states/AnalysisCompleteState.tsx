@@ -18,8 +18,13 @@ export const AnalysisCompleteState: React.FC<AnalysisCompleteStateProps> = ({
   const router = useRouter();
 
   const handleStartPlayerIdentification = () => {
-    // Navigate to dataprep/processVideo with video information
-    router.push('/dataprep/processVideo');
+    // Navigate to dataprep page with video information as URL parameters
+    const params = new URLSearchParams({
+      fileName: uploadState.videoFile?.fileName || '',
+      signedUrl: uploadState.videoFile?.signedUrl || '',
+      autoStart: 'true' // Flag to indicate we should automatically start processing
+    });
+    router.push(`/dataprep?${params.toString()}`);
   };
 
   return (
