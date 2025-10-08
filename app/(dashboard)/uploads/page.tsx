@@ -26,6 +26,10 @@ export default function Uploads() {
   const hasCheckedRef = useRef(false);
 
   const [uploadState, setUploadState] = useState<UploadState>(() => {
+    // Only access sessionStorage on the client side
+    if (typeof window === 'undefined') {
+      return { type: 'initial' };
+    }
     try {
       const saved = sessionStorage.getItem('uploadState');
       if (saved) {
@@ -38,7 +42,9 @@ export default function Uploads() {
       }
     } catch (e) {
       console.warn('Failed to parse saved upload state, using default:', e);
-      sessionStorage.removeItem('uploadState');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('uploadState');
+      }
     }
     return { type: 'initial' };
   });
@@ -79,7 +85,9 @@ export default function Uploads() {
 
   // Persist state changes to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem('uploadState', JSON.stringify(uploadState));
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('uploadState', JSON.stringify(uploadState));
+    }
   }, [uploadState]);
 
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();

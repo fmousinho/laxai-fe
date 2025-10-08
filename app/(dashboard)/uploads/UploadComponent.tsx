@@ -1,7 +1,10 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useDropzone } from "react-dropzone";
+
+// Global variable to store the latest setUploadState function for progress callbacks
+let globalSetUploadState: React.Dispatch<React.SetStateAction<any>> | null = null;
 
 interface UploadComponentProps {
   uploadState: any; // We'll type this properly
@@ -12,22 +15,34 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
 
+  // Update global reference for progress callbacks
+  globalSetUploadState = setUploadState;
+
   // Helper to update both local state and the shared uploadState so the progress
   // bar in parent components always reflects bytes-uploaded progress.
   // Accepts optional loaded/total to expose byte counts as well.
   const updateProgress = (percent: number, loaded?: number | null, total?: number | null) => {
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-    // Update parent state with progress
-    setUploadState((prev: any) => ({
-      ...(prev || {}),
-      uploadProgress: clamped,
-      videoFile: {
-        ...(prev?.videoFile || {}),
-        progress: clamped,
-        bytesUploaded: loaded ?? prev?.videoFile?.bytesUploaded ?? null,
-        bytesTotal: total ?? prev?.videoFile?.bytesTotal ?? null,
-      }
-    }));
+    // Update parent state with progress using global reference
+    if (globalSetUploadState) {
+      globalSetUploadState((prev: any) => {
+        const newState = {
+          ...(prev || {}),
+          uploadProgress: clamped,
+          videoFile: {
+            ...(prev?.videoFile || {}),
+            progress: clamped,
+            bytesUploaded: loaded ?? prev?.videoFile?.bytesUploaded ?? null,
+            bytesTotal: total ?? prev?.videoFile?.bytesTotal ?? null,
+          }
+        };
+        // Also save directly to sessionStorage to ensure progress persists across remounts
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('uploadState', JSON.stringify(newState));
+        }
+        return newState;
+      });
+    }
   };
 
   // (Debugging hooks removed) progress updates are handled by updateProgress.
@@ -45,14 +60,17 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
           percentCompleted = Math.round((event.loaded / event.total) * 100);
         } else {
           // Fallback: estimate progress based on loaded bytes
-          percentCompleted = Math.min(95, Math.round(event.loaded / (file.size / 100)));
+          // Cap at 99% to ensure onload handles final completion
+          percentCompleted = Math.min(99, Math.round(event.loaded / (file.size / 100)));
         }
         updateProgress(percentCompleted, event.loaded, total);
       };
 
-      // Handle completion
+      // Handle completion - this is the definitive completion event
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          // Set progress to 100% on successful completion
+          updateProgress(100, file.size, file.size);
           resolve();
         } else {
           reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
@@ -83,21 +101,28 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
   const uploadWithFetch = async (signedUrl: string, file: File, startTime: number): Promise<void> => {
     // Simulate progress for large files in Safari
     const progressInterval = setInterval(() => {
-      setUploadState((prev: any) => {
-        const currentProgress = prev?.uploadProgress || 0;
-        if (currentProgress < 90) {
-          const newProgress = Math.round(currentProgress + Math.random() * 10);
-          return {
-            ...prev,
-            uploadProgress: newProgress,
-            videoFile: {
-              ...(prev?.videoFile || {}),
-              progress: newProgress,
+      if (globalSetUploadState) {
+        globalSetUploadState((prev: any) => {
+          const currentProgress = prev?.uploadProgress || 0;
+          if (currentProgress < 90) {
+            const newProgress = Math.round(currentProgress + Math.random() * 10);
+            const newState = {
+              ...prev,
+              uploadProgress: newProgress,
+              videoFile: {
+                ...(prev?.videoFile || {}),
+                progress: newProgress,
+              }
+            };
+            // Save directly to sessionStorage
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('uploadState', JSON.stringify(newState));
             }
-          };
-        }
-        return prev;
-      });
+            return newState;
+          }
+          return prev;
+        });
+      }
     }, 2000);
 
     try {
@@ -114,6 +139,27 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+      }
+
+      // Set progress to 100% on successful completion
+      if (globalSetUploadState) {
+        globalSetUploadState((prev: any) => {
+          const newState = {
+            ...prev,
+            uploadProgress: 100,
+            videoFile: {
+              ...(prev?.videoFile || {}),
+              progress: 100,
+              bytesUploaded: file.size,
+              bytesTotal: file.size,
+            }
+          };
+          // Save directly to sessionStorage
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('uploadState', JSON.stringify(newState));
+          }
+          return newState;
+        });
       }
     } catch (error) {
       clearInterval(progressInterval);
@@ -133,23 +179,22 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
         if (progressEvent.total && progressEvent.total > 0) {
           percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         } else {
-          // Fallback: estimate progress based on loaded bytes (rough approximation)
-          percentCompleted = Math.min(95, Math.round(progressEvent.loaded / (file.size / 100)));
+          // Fallback: estimate progress based on loaded bytes
+          // Cap at 99% to ensure completion handler sets final 100%
+          percentCompleted = Math.min(99, Math.round(progressEvent.loaded / (file.size / 100)));
         }
         updateProgress(percentCompleted, progressEvent.loaded, total);
       },
       timeout: 300000, // 5 minutes
     });
 
-    // finished
+    // Ensure progress is set to 100% on completion
+    updateProgress(100, file.size, file.size);
   };
 
   // Upload logic
   const uploadFile = async (file: File) => {
-  setUploading(true);
-    // Check if Safari and file is large
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isLargeFile = file.size > 100 * 1024 * 1024; // 100MB
+    setUploading(true);
 
     try {
       const { data } = await axios.post('/api/gcs/upload_video', {
@@ -160,18 +205,16 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
       if (!signedUrl) throw new Error('No signed URL received from server');
       const startTime = Date.now();
 
-      // Use different upload strategy for Safari with large files
-      if (isSafari && isLargeFile) {
-        await uploadWithFetch(signedUrl, file, startTime);
-      } else {
-        await uploadWithXHR(signedUrl, file, startTime);
-      }
+      // Use Axios for all uploads - provides real progress tracking
+      await uploadWithAxios(signedUrl, file, startTime);
       setSelectedFileName(null);
 
       // After upload, we need a read-signed URL. The `signedUrl` we used for PUT
       // is an upload URL and may return 400 for GET/HEAD. Ask the backend for
       // the read signed URL via the list endpoint and retry a few times.
-      setUploadState((prev: any) => ({ ...(prev || {}), type: 'preparing' }));
+      if (globalSetUploadState) {
+        globalSetUploadState((prev: any) => ({ ...(prev || {}), type: 'preparing' }));
+      }
 
       const findReadSignedUrl = async (): Promise<string | null> => {
         try {
@@ -197,18 +240,22 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
       if (!readSignedUrl) {
         // Couldn't find a read URL in time — still transition to preparing and
         // let server-side processes handle availability.
-        setUploadState((prev: any) => ({ ...(prev || {}), type: 'preparing' }));
+        if (globalSetUploadState) {
+          globalSetUploadState((prev: any) => ({ ...(prev || {}), type: 'preparing' }));
+        }
       } else {
         // Set the read-signed URL and then poll it until HEAD succeeds (file available)
-        setUploadState((prev: any) => ({
-          ...(prev || {}),
-          type: 'preparing',
-          videoFile: {
-            fileName: file.name,
-            signedUrl: readSignedUrl,
-            fullPath: file.name
-          }
-        }));
+        if (globalSetUploadState) {
+          globalSetUploadState((prev: any) => ({
+            ...(prev || {}),
+            type: 'preparing',
+            videoFile: {
+              fileName: file.name,
+              signedUrl: readSignedUrl,
+              fullPath: file.name
+            }
+          }));
+        }
 
         const checkVideoReady = async (): Promise<boolean> => {
           try {
@@ -225,21 +272,25 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
           const isReady = await checkVideoReady();
 
           if (isReady) {
-            setUploadState((prev: any) => {
-              if (prev.type === 'preparing') {
-                return { ...prev, type: 'ready' };
-              }
-              return prev;
-            });
+            if (globalSetUploadState) {
+              globalSetUploadState((prev: any) => {
+                if (prev.type === 'preparing') {
+                  return { ...prev, type: 'ready' };
+                }
+                return prev;
+              });
+            }
           } else if (attempts < maxAttempts) {
             setTimeout(pollForVideo, 500);
           } else {
-            setUploadState((prev: any) => {
-              if (prev.type === 'preparing') {
-                return { ...prev, type: 'ready' };
-              }
-              return prev;
-            });
+            if (globalSetUploadState) {
+              globalSetUploadState((prev: any) => {
+                if (prev.type === 'preparing') {
+                  return { ...prev, type: 'ready' };
+                }
+                return prev;
+              });
+            }
           }
         };
 
@@ -247,7 +298,9 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
       }
     } catch (error: any) {
       const errorMsg = (error && (error.message || (error.response && error.response.data) || String(error))) || 'Upload failed';
-      setUploadState({ type: 'failed_upload', error: errorMsg });
+      if (globalSetUploadState) {
+        globalSetUploadState({ type: 'failed_upload', error: errorMsg });
+      }
     } finally {
       setUploading(false);
     }
@@ -270,13 +323,15 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
       setSelectedFileName(file.name);
 
       // Transition to uploading state immediately when file is selected
-      setUploadState({ type: 'uploading', uploadProgress: 0 });
+      if (globalSetUploadState) {
+        globalSetUploadState({ type: 'uploading', uploadProgress: 0 });
+      }
       uploadFile(file);
     } else {
       setSelectedFileName(null);
       alert('Please select an MP4 video file.');
     }
-  }, [setUploadState]);
+  }, []); // No dependencies needed since we use global
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -326,7 +381,7 @@ export function UploadComponent({ uploadState, setUploadState }: UploadComponent
            isPreparing ? "Preparing video..." :
            "Drag & drop a file here, or click to select"}
         </p>
-        {isUploadingState && ( // Show progress bar only in uploading state
+        {(isUploadingState || isPreparing) && ( // Show progress bar only in uploading state
           <div className="w-full mt-4">
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div

@@ -16,6 +16,11 @@ interface AnalysingStateProps {
 const COUNTDOWN_DURATION = 180; // 3 minutes
 const POLLING_INTERVAL = 5000; // 5 seconds
 
+// Module-level Map to prevent duplicate API calls across all component instances
+// This is necessary because React Strict Mode mounts components twice simultaneously
+// Maps fileName -> Promise<taskId> for in-flight requests
+const pendingAnalysisRequests = new Map<string, Promise<string>>();
+
 export function AnalysingState({ uploadState, setUploadState }: AnalysingStateProps) {
   // Helper functions for localStorage - using endTime instead of startTime + duration
   // Use video file name as key instead of task ID, since task ID can change on retries
@@ -117,27 +122,170 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
   };
 
+  // Function to retry analysis request if task ID is missing
+  const retryAnalysisRequest = async () => {
+    if (!uploadState.videoFile?.fileName) {
+      console.error('Cannot retry analysis - no video file name');
+      setErrorMessage('Cannot retry analysis - no video file name');
+      setAnalysingSubstate('error');
+      return;
+    }
+
+    const fileName = uploadState.videoFile.fileName;
+    const cachedTaskKey = `analysis_task_${fileName}`;
+
+    // Check localStorage cache FIRST (fastest, synchronous check)
+    const cachedTaskId = typeof window !== 'undefined' ? localStorage.getItem(cachedTaskKey) : null;
+    if (cachedTaskId) {
+      console.log('📦 Using cached task ID from localStorage:', cachedTaskId);
+      setUploadState(prev => ({
+        ...prev,
+        analysisTaskId: cachedTaskId
+      }));
+      return;
+    }
+
+    // ATOMIC check-and-set: Get existing promise OR create new one
+    let requestPromise = pendingAnalysisRequests.get(fileName);
+    
+    if (!requestPromise) {
+      // No existing promise - create and store it IMMEDIATELY (before any await)
+      console.log('🚀 Creating new analysis task for:', fileName);
+      
+      requestPromise = (async () => {
+        try {
+          const res = await fetch('/api/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              video_filename: fileName,
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`Analysis request failed with status ${res.status}`);
+          }
+
+          const data = await res.json();
+          
+          // Cache in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(cachedTaskKey, data.task_id);
+          }
+          
+          console.log('✅ New task ID received:', data.task_id);
+          return data.task_id;
+        } catch (error) {
+          console.error('Error creating analysis task:', error);
+          throw error;
+        } finally {
+          pendingAnalysisRequests.delete(fileName);
+        }
+      })();
+      
+      // Store in Map IMMEDIATELY (critical for Strict Mode double-mount)
+      pendingAnalysisRequests.set(fileName, requestPromise);
+    } else {
+      console.log('🔄 Reusing in-flight request for:', fileName);
+    }
+
+    // Await the promise (either new or existing)
+
+    // Check if there's already a pending request for this file (module-level check)
+    // This prevents React Strict Mode from creating duplicate backend tasks
+    if (pendingAnalysisRequests.has(fileName)) {
+      console.log('� Analysis request already in progress for:', fileName, '- using existing promise');
+      try {
+        const taskId = await pendingAnalysisRequests.get(fileName)!;
+        setUploadState(prev => ({
+          ...prev,
+          analysisTaskId: taskId
+        }));
+        console.log('✅ Reused task ID from in-flight request:', taskId);
+      } catch (error) {
+        console.error('Error waiting for in-flight request:', error);
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to get analysis task ID');
+        setAnalysingSubstate('error');
+      }
+      return;
+    }
+
+    // Check localStorage cache
+    const cachedTaskKey = `analysis_task_${fileName}`;
+    const cachedTaskId = typeof window !== 'undefined' ? localStorage.getItem(cachedTaskKey) : null;
+    
+    if (cachedTaskId) {
+      console.log('📦 Using cached task ID from localStorage:', cachedTaskId);
+      setUploadState(prev => ({
+        ...prev,
+        analysisTaskId: cachedTaskId
+      }));
+      return;
+    }
+
+    // Create a new promise for this request and store it in the module-level Map
+    const requestPromise = (async () => {
+      try {
+        console.log('🚀 Creating new analysis task for:', fileName);
+        const res = await fetch('/api/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_filename: fileName,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Analysis request failed with status ${res.status}`);
+        }
+
+        const data = await res.json();
+        
+        // Cache the task ID in localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(cachedTaskKey, data.task_id);
+        }
+        
+        console.log('✅ Analysis task ID received:', data.task_id);
+        return data.task_id;
+      } catch (error) {
+        console.error('Error creating analysis task:', error);
+        throw error;
+      } finally {
+        // Clean up the pending request from the Map
+        pendingAnalysisRequests.delete(fileName);
+      }
+    })();
+
+    // Store the promise in the module-level Map BEFORE awaiting
+    pendingAnalysisRequests.set(fileName, requestPromise);
+
+    try {
+      const taskId = await requestPromise;
+      
+      // Update the upload state with the task ID
+      setUploadState(prev => ({
+        ...prev,
+        analysisTaskId: taskId
+      }));
+    } catch (error) {
+      console.error('Failed to retry analysis request:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to retry analysis');
+      setAnalysingSubstate('error');
+    }
+  };
+
   // Initialize component state on mount and handle missing task ID
   useEffect(() => {
     const storedSubstate = uploadState.analysisTaskId ? getStoredSubstate() : null;
     const initialSubstate = storedSubstate || 'not_started';
     setAnalysingSubstate(initialSubstate);
 
-    // ONLY retry if we have a task ID in localStorage but not in state
-    // This handles the case where user refreshed the page during analysis
-    // DO NOT retry on initial mount when transitioning from ready -> analysing
-    // (the parent component creates the task via handleVideoAnalysis)
-    const fileName = uploadState.videoFile?.fileName;
-    const cachedTaskId = fileName && typeof window !== 'undefined' 
-      ? localStorage.getItem(`analysis_task_${fileName}`) 
-      : null;
-    
-    if (cachedTaskId && (!uploadState.analysisTaskId || uploadState.analysisTaskId === '')) {
-      console.log('Found cached task ID after page refresh, recovering:', cachedTaskId);
-      setUploadState(prev => ({
-        ...prev,
-        analysisTaskId: cachedTaskId
-      }));
+    // If we're in analysing state but have no task ID, we need to retry the API call
+    // This happens when user navigates away before the task ID is received
+    if (!uploadState.analysisTaskId || uploadState.analysisTaskId === '') {
+      console.log('No analysis task ID found - retrying analysis request');
+      retryAnalysisRequest();
     }
 
     // Cleanup on unmount - ensure polling timeout is cleared
