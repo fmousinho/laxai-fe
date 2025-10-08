@@ -122,6 +122,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           setShouldPoll(true);
           shouldPollRef.current = true;
           const storedCountdown = getStoredCountdown(uploadState.analysisTaskId);
+          console.log('Stored countdown:', storedCountdown);
           if (storedCountdown) {
             setCountdown(storedCountdown);
           } else {
@@ -185,7 +186,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
             return; // Stop if polling should be disabled
           }
 
-          await pollProgress(uploadState.analysisTaskId);
+          await pollProgress(uploadState.analysisTaskId!);
 
           // Schedule next poll only if we should continue polling
           if (shouldPollRef.current) {

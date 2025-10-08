@@ -46,7 +46,7 @@ export type UploadState =
   | UploadingState
   | { type: 'preparing'; videoFile: VideoFile }
   | { type: 'ready'; videoFile: VideoFile }
-  | { type: 'analysing'; videoFile: VideoFile; analysisTaskId: string }
+  | { type: 'analysing'; videoFile: VideoFile; analysisTaskId?: string }
   | { type: 'analysis_complete'; videoFile: VideoFile; analysisTaskId: string }
   | { type: 'failed_upload'; videoFile?: VideoFile; error: string }
   | { type: 'failed_analysis'; videoFile: VideoFile; error: string; analysisTaskId: string }

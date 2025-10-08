@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useErrorHandler } from '@/lib/useErrorHandler';
 import { ErrorPage } from '@/components/ErrorPage';
@@ -19,28 +19,62 @@ import {
   DeletingState
 } from './states';
 
-export default function Uploads() {
-  const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(true);
-  
-  // Unified state management with persistence
-  const [uploadState, setUploadState] = useState<UploadState>({ type: 'initial' });
 
-  // Restore state from sessionStorage after mount (avoiding hydration mismatch)
-  useEffect(() => {
+export default function Uploads() {
+  const [isStateRestored, setIsStateRestored] = useState(false);
+  const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(false);
+  const hasCheckedRef = useRef(false);
+
+  const [uploadState, setUploadState] = useState<UploadState>(() => {
     try {
       const saved = sessionStorage.getItem('uploadState');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Validate that it's a valid UploadState
         if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-          setUploadState(parsed as UploadState);
+          console.log('Restored upload state from sessionStorage:', parsed);
+          setIsStateRestored(true);
+          return parsed as UploadState;
         }
       }
     } catch (e) {
       console.warn('Failed to parse saved upload state, using default:', e);
-      // Clear corrupted dataAnaly
       sessionStorage.removeItem('uploadState');
     }
+    return { type: 'initial' };
+  });
+
+  // Set hasCheckedExistingFiles to true when we're not in initial state
+  useEffect(() => {
+    if (uploadState.type !== 'initial') {
+      setHasCheckedExistingFiles(true);
+    }
+  }, [uploadState.type]);
+
+  // Check for existing files when initially in initial state
+  useEffect(() => {
+    if (uploadState.type !== 'initial' || hasCheckedRef.current) {
+      return;
+    }
+    hasCheckedRef.current = true;
+    const checkExistingFiles = async () => {
+      try {
+        console.log('Checking for existing files...');
+        const { data } = await axios.get('/api/gcs/list_video?folder=raw');
+        console.log('GCS list_video response:', data);
+        if (data.files && data.files.length > 0) {
+          console.log('Found existing file, using it:', data.files[0]);
+          setUploadState({
+            type: 'ready',
+            videoFile: data.files[0]
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to check existing files:', e);
+      } finally {
+        setHasCheckedExistingFiles(true);
+      }
+    };
+    checkExistingFiles();
   }, []);
 
   // Persist state changes to sessionStorage
@@ -49,32 +83,6 @@ export default function Uploads() {
   }, [uploadState]);
 
   const { error: apiError, handleFetchError, handleApiError, clearError } = useErrorHandler();
-
-  // On mount, check for existing videos if we are in the initial state
-  useEffect(() => {
-    const checkExistingFiles = async () => {
-      if (uploadState.type === 'initial') {
-        try {
-          const { data } = await axios.get('/api/gcs/list_video?folder=raw');
-          if (data.files && data.files.length > 0) {
-            console.log('Found existing file, using it:', data.files[0]);
-            setUploadState({
-              type: 'ready',
-              videoFile: data.files[0]
-            });
-          }
-        } catch (e) {
-          console.warn('Failed to check existing files:', e);
-        } finally {
-          setHasCheckedExistingFiles(true);
-        }
-      } else {
-        setHasCheckedExistingFiles(true);
-      }
-    };
-    checkExistingFiles();
-  }, []);
-
 
   const handleUploadComplete = async (uploadSignedUrl: string, fileName: string) => {
     console.log('handleUploadComplete called with:', { uploadSignedUrl, fileName });
@@ -165,6 +173,7 @@ export default function Uploads() {
   const handleDelete = async () => {
     if (uploadState.type !== 'ready' || !uploadState.videoFile) return;
 
+    console.log('Starting delete operation for file:', uploadState.videoFile);
     setUploadState(prev => ({ 
       type: 'deleting', 
       videoFile: (prev as Extract<UploadState, { type: 'ready'; }>).videoFile 
@@ -172,13 +181,18 @@ export default function Uploads() {
 
     try {
       const filePath = uploadState.videoFile!.fullPath || uploadState.videoFile!.fileName;
+      console.log('Deleting file with path:', filePath);
       await axios.delete('/api/gcs/delete_video', { data: { fileName: filePath } });
+      console.log('Delete API call completed');
 
       // Check if there are other files
+      console.log('Checking for remaining files...');
       const { data } = await axios.get('/api/gcs/list_video?folder=raw');
+      console.log('List API response:', data);
       // Filter out the deleted file in case the API returns stale data
       const remainingFiles = (data.files || []).filter((file: VideoFile) => (file.fullPath || file.fileName) !== filePath
       );
+      console.log('Remaining files:', remainingFiles);
 
       if (remainingFiles.length > 0) {
         setUploadState({
@@ -187,8 +201,11 @@ export default function Uploads() {
         });
       } else {
         setUploadState({ type: 'initial' });
+        setHasCheckedExistingFiles(true); // We just checked, no need to check again
       }
+      console.log('Delete operation completed successfully');
     } catch (err) {
+      console.error('Delete operation failed:', err);
       setUploadState(prev => ({
         type: 'ready',
         videoFile: (prev as Extract<UploadState, { type: 'deleting'; }>).videoFile
@@ -203,7 +220,6 @@ export default function Uploads() {
       type: 'analysing',
       videoFile: (prev as Extract<UploadState, { type: 'ready'; }>).videoFile,
       status: 'not_started' as const,
-      analysisProgress: [],
       analysisTaskId: ''
     }));
     clearError();
@@ -223,7 +239,7 @@ export default function Uploads() {
           type: 'failed_analysis',
           videoFile: (prev as Extract<UploadState, { type: 'analysing'; }>).videoFile,
           error: 'Analysis request failed',
-          analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId
+          analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId!
         }));
         return;
       }
@@ -241,7 +257,7 @@ export default function Uploads() {
         type: 'failed_analysis',
         videoFile: (prev as Extract<UploadState, { type: 'analysing'; }>).videoFile,
         error: 'Failed to start analysis',
-        analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId
+        analysisTaskId: (prev as Extract<UploadState, { type: 'analysing'; }>).analysisTaskId!
       }));
     }
   };
@@ -337,7 +353,7 @@ export default function Uploads() {
     };  return (
     <RuntimeErrorBoundary>
       <div className="py-8">
-        {!hasCheckedExistingFiles ? (
+        {uploadState.type === 'initial' && !hasCheckedExistingFiles ? (
           <div className="text-center text-muted-foreground">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
             <p>Loading...</p>
