@@ -134,9 +134,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
     }
 
-    const { label } = await req.json();
+    const { label, pair_id } = await req.json();
     if (!label || !['same', 'different', 'skip'].includes(label)) {
       return NextResponse.json({ error: 'Invalid label. Must be "same", "different", or "skip"' }, { status: 400 });
+    }
+
+    if (!pair_id || typeof pair_id !== 'string') {
+      return NextResponse.json({ error: 'pair_id is required and must be a string' }, { status: 400 });
     }
 
     // Authenticate with Google Cloud
@@ -145,10 +149,10 @@ export async function POST(req: NextRequest) {
 
     // Make request to backend API
     const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/dataprep/record-response`,
+      url: `${BACKEND_URL}/api/v1/dataprep/respond`,
       method: 'POST',
       params: { tenant_id: tenantId },
-      data: { decision: label }
+      data: { pair_id, decision: label }
     });
 
     console.log('Classification recorded successfully:', response.data);

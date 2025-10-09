@@ -98,7 +98,15 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
         group2_id: data.group2_id,
         total_pairs: data.total_pairs,
         verified_pairs: data.verified_pairs,
-        status: data.status
+        status: data.status,
+        pair_id: data.pair_id,
+        mode: data.mode,
+        issued_at: data.issued_at,
+        expires_at: data.expires_at,
+        outstanding_pair_ids: data.outstanding_pair_ids,
+        max_outstanding_pairs: data.max_outstanding_pairs,
+        group1_prefixes: data.group1_prefixes,
+        group2_prefixes: data.group2_prefixes
       };
 
       console.log(`Fetched next pair: ${imagesA.length} imagesA and ${imagesB.length} imagesB`);

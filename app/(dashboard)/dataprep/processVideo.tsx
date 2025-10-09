@@ -21,6 +21,7 @@ type ImagePair = {
   imagesB: string[];
   group1_id?: number;
   group2_id?: number;
+  pair_id?: string; // Add pair_id field
 };
 
 interface ProcessVideoProps {
@@ -217,6 +218,12 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   };
 
   const handleClassify = async (label: "same" | "different") => {
+    if (!imagePair?.pair_id) {
+      console.error('No pair_id available for classification');
+      handleApiError({ message: 'Missing pair ID for classification' }, 'handleClassify');
+      return;
+    }
+
     setLoading(true);
     clearError(); // Clear any previous errors
 
@@ -224,7 +231,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       const res = await fetch("/api/dataprep/classify_pair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label }),
+        body: JSON.stringify({ label, pair_id: imagePair.pair_id }),
       });
       const isOk = await handleFetchError(res, 'handleClassify');
       if (!isOk) {
@@ -256,6 +263,12 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   };
 
   const handleSkip = async () => {
+    if (!imagePair?.pair_id) {
+      console.error('No pair_id available for skip');
+      handleApiError({ message: 'Missing pair ID for skip' }, 'handleSkip');
+      return;
+    }
+
     setLoading(true);
     clearError(); // Clear any previous errors
 
@@ -263,7 +276,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       const res = await fetch("/api/dataprep/classify_pair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: "skip" }),
+        body: JSON.stringify({ label: "skip", pair_id: imagePair.pair_id }),
       });
       const isOk = await handleFetchError(res, 'handleSkip');
       if (!isOk) {

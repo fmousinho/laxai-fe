@@ -19,6 +19,16 @@ export default function User() {
   const { user, isLoading } = useUser();
 
   const handleSignOut = () => {
+    // Clear client-side caches before redirecting
+    localStorage.removeItem('auth0.is.authenticated');
+    localStorage.removeItem('auth0.is.silent');
+    sessionStorage.clear();
+
+    // Clear Auth0 cookies
+    document.cookie = 'auth0.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'app.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+    // Redirect to server-side logout
     window.location.href = '/api/auth/logout';
   };
 

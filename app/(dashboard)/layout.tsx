@@ -6,7 +6,6 @@ import {
   Package2,
   PanelLeft,
   Settings,
-  ShoppingCart,
   Upload,
   Combine
 } from 'lucide-react';
@@ -79,10 +78,6 @@ function DesktopNav() {
           <Home className="h-5 w-5" />
         </NavItem>
 
-        <NavItem href="#" label="Orders">
-          <ShoppingCart className="h-5 w-5" />
-        </NavItem>
-
         <NavItem href="#" label="Analytics">
           <LineChart className="h-5 w-5" />
         </NavItem>
@@ -137,13 +132,6 @@ function MobileNav() {
           >
             <Home className="h-5 w-5" />
             Dashboard
-          </Link>
-          <Link
-            href="#"
-            className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            Orders
           </Link>
           <Link
             href="#"

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // Create response that clears the session cookie
-  const response = NextResponse.redirect(
-    `https://${process.env.AUTH0_DOMAIN}/v2/logout?client_id=${process.env.AUTH0_CLIENT_ID}&returnTo=${encodeURIComponent(process.env.APP_BASE_URL || 'http://localhost:3000')}`
-  );
+  // Create response that clears the session cookie and redirects to login
+  const response = NextResponse.redirect('/login');
 
   // Clear the auth0 session cookie
   response.cookies.set('auth0.sid', '', {
