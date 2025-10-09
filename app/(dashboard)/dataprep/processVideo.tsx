@@ -33,8 +33,10 @@ interface ProcessVideoProps {
 export default function ProcessVideo({ video, onBackToList, onClassificationComplete }: ProcessVideoProps) {
   const [started, setStarted] = useState(false);
   const [imagePair, setImagePair] = useState<ImagePair | null>(null);
+  const [nextImagePair, setNextImagePair] = useState<ImagePair | null>(null); // Prefetched next pair
   const [loading, setLoading] = useState(true); // Start with loading true
   const [suspended, setSuspended] = useState(false);
+  const [prefetching, setPrefetching] = useState(false); // Track if we're currently prefetching
   const [imageLoadingStatesA, setImageLoadingStatesA] = useState<boolean[]>([]);
   const [imageLoadingStatesB, setImageLoadingStatesB] = useState<boolean[]>([]);
 
@@ -52,16 +54,19 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   // Monitor for empty dataprep groups and log errors
   useEffect(() => {
     if (started && !loading) {
-      if (!imagePair) {
+      if (!imagePair && !nextImagePair) {
         console.error('🚨 DATAPREP GROUP ERROR: No image pair available for verification', {
           video: video.fileName,
           started,
           loading,
           suspended,
+          hasCurrentPair: !!imagePair,
+          hasNextPair: !!nextImagePair,
+          prefetching,
           timestamp: new Date().toISOString(),
           troubleshooting: 'This indicates the video has not been processed or all verification pairs have been exhausted'
         });
-      } else {
+      } else if (imagePair) {
         if (!imagePair.imagesA || imagePair.imagesA.length === 0) {
           console.error('🚨 DATAPREP GROUP ERROR: Group A (imagesA) is empty', {
             video: video.fileName,
@@ -84,7 +89,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         }
       }
     }
-  }, [started, loading, imagePair, video.fileName]);
+  }, [started, loading, imagePair, nextImagePair, prefetching, video.fileName]);
 
   // Initialize loading states when imagePair changes
   useEffect(() => {
@@ -94,12 +99,47 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     }
   }, [imagePair]);
 
+  // Add keyboard shortcuts for classification
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only handle shortcuts when we have an image pair and are not loading
+      if (!imagePair || loading) return;
+
+      switch (event.key.toLowerCase()) {
+        case 's':
+          event.preventDefault();
+          handleClassify("same");
+          break;
+        case 'd':
+          event.preventDefault();
+          handleClassify("different");
+          break;
+        case 'k':
+          event.preventDefault();
+          handleSkip();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [imagePair, loading]);
+
   const fetchPair = async () => {
     await fetchNextVerificationPair();
   };
 
-  const fetchNextVerificationPair = async () => {
-    setLoading(true);
+  const fetchNextVerificationPair = async (isPrefetch: boolean = false) => {
+    if (isPrefetch && prefetching) {
+      // Already prefetching, don't start another request
+      return;
+    }
+
+    if (isPrefetch) {
+      setPrefetching(true);
+    } else {
+      setLoading(true);
+    }
     clearError();
 
     try {
@@ -128,7 +168,13 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       // Check if classification is complete
       if (data.status === 'complete') {
         console.log('Classification complete - all tracks have been assigned to players');
-        onClassificationComplete();
+        if (isPrefetch) {
+          // During prefetch, just mark that we're done prefetching
+          setPrefetching(false);
+        } else {
+          // During normal fetch, complete the classification
+          onClassificationComplete();
+        }
         return;
       }
 
@@ -171,13 +217,25 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       } else {
         console.log('Setting image pair with', data.imagesA.length, 'imagesA and', data.imagesB.length, 'imagesB');
-        setImagePair(data);
+        if (isPrefetch) {
+          setNextImagePair(data);
+          setPrefetching(false);
+        } else {
+          setImagePair(data);
+          // After setting the current pair, prefetch the next one
+          setTimeout(() => fetchNextVerificationPair(true), 100); // Small delay to avoid overwhelming the server
+        }
       }
     } catch (error) {
       console.error('Failed to fetch next verification pair:', error);
       handleApiError(error, 'fetchNextVerificationPair');
     }
-    setLoading(false);
+    
+    if (isPrefetch) {
+      setPrefetching(false);
+    } else {
+      setLoading(false);
+    }
   };
 
   const handleStart = async () => {
@@ -247,10 +305,19 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       
-      // Check if we got next images in the response
+      // Check if we got next images in the response (fallback)
       if (responseData.next_images) {
         console.log('Received next images in classify response');
         setImagePair(responseData.next_images);
+        // Prefetch the next pair after setting this one
+        setTimeout(() => fetchNextVerificationPair(true), 100);
+      } else if (nextImagePair) {
+        // Use the prefetched pair
+        console.log('Using prefetched pair');
+        setImagePair(nextImagePair);
+        setNextImagePair(null);
+        // Prefetch the next pair after setting this one
+        setTimeout(() => fetchNextVerificationPair(true), 100);
       } else {
         console.log('No more images available');
         setImagePair(null);
@@ -292,10 +359,19 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       
-      // Check if we got next images in the response
+      // Check if we got next images in the response (fallback)
       if (responseData.next_images) {
         console.log('Received next images in skip response');
         setImagePair(responseData.next_images);
+        // Prefetch the next pair after setting this one
+        setTimeout(() => fetchNextVerificationPair(true), 100);
+      } else if (nextImagePair) {
+        // Use the prefetched pair
+        console.log('Using prefetched pair');
+        setImagePair(nextImagePair);
+        setNextImagePair(null);
+        // Prefetch the next pair after setting this one
+        setTimeout(() => fetchNextVerificationPair(true), 100);
       } else {
         console.log('No more images available');
         setImagePair(null);
@@ -320,6 +396,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       setStarted(false);
       setSuspended(true);
       setImagePair(null);
+      setNextImagePair(null);
     } catch (error) {
       console.error('Failed to suspend:', error);
       handleApiError(error, 'handleSuspend');
@@ -472,22 +549,26 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
               onClick={() => handleClassify("same")}
               disabled={loading}
             >
-              Same
+              <u>S</u>ame
             </button>
             <button
               className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
               onClick={() => handleClassify("different")}
               disabled={loading}
             >
-              Different
+              <u>D</u>ifferent
             </button>
             <button
               className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
               onClick={handleSkip}
               disabled={loading}
             >
-              Skip
+              S<u>k</u>ip
             </button>
+          </div>
+
+          <div className="mt-2 text-center text-sm text-muted-foreground">
+            Keyboard shortcuts: <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">S</kbd> Same • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">D</kbd> Different • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">K</kbd> Skip
           </div>
 
           <div className="mt-10">
