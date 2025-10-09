@@ -9,15 +9,20 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { user, isLoading } = useUser();
+  const { user, isLoading, error } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      // Redirect to login if not authenticated
+    // If there's an auth error or no user after loading, redirect to login
+    if (!isLoading && (!user || error)) {
+      // Clear any cached auth state
+      localStorage.removeItem('auth0.is.authenticated');
+      sessionStorage.clear();
+
+      // Redirect to login
       router.push('/api/auth/login');
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, error, router]);
 
   // Show loading state while checking authentication
   if (isLoading) {

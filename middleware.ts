@@ -28,14 +28,16 @@ export async function middleware(request: NextRequest) {
       // Verify the user has a valid session
       const session = await auth0.getSession(request);
 
-      if (!session?.user) {
+      // More strict validation: check if session exists AND has a user AND has required fields
+      if (!session?.user || !session.user.sub) {
         // Redirect to login page with return URL
         const loginUrl = new URL('/api/auth/login', request.url);
         loginUrl.searchParams.set('returnTo', request.nextUrl.pathname);
         return Response.redirect(loginUrl);
       }
+
     } catch (error) {
-      // If session verification fails, redirect to login
+      // If session verification fails for any reason, redirect to login
       const loginUrl = new URL('/api/auth/login', request.url);
       loginUrl.searchParams.set('returnTo', request.nextUrl.pathname);
       return Response.redirect(loginUrl);
