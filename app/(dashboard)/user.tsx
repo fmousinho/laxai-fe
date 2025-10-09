@@ -27,8 +27,8 @@ export default function User() {
 
     console.log('[USER] Client-side cleanup complete, redirecting to API logout');
 
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const returnTo = origin ? `${origin}/login` : '/login';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const returnTo = origin ? origin : '/';
     const logoutUrl = `/api/auth/logout?returnTo=${encodeURIComponent(returnTo)}`;
 
     window.location.href = logoutUrl;

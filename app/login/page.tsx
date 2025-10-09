@@ -8,7 +8,43 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function buildSafeReturnTo(raw?: string | string[]): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.startsWith('/')) {
+      return decoded;
+    }
+  } catch (error) {
+    console.warn('[LoginPage] Failed to decode returnTo value', error);
+  }
+
+  return undefined;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const safeReturnTo = buildSafeReturnTo(resolvedSearchParams?.returnTo);
+  const baseLoginUrl = '/api/auth/login';
+  const loginUrl = safeReturnTo
+    ? `${baseLoginUrl}?returnTo=${encodeURIComponent(safeReturnTo)}`
+    : baseLoginUrl;
+  const googleLoginUrl = safeReturnTo
+    ? `${baseLoginUrl}?connection=google-oauth2&returnTo=${encodeURIComponent(safeReturnTo)}`
+    : `${baseLoginUrl}?connection=google-oauth2`;
+
   return (
     <div className="min-h-screen flex justify-center items-center p-8 bg-gradient-to-br from-slate-50 to-slate-100">
       <Card className="w-full max-w-md shadow-lg">
@@ -26,7 +62,7 @@ export default function LoginPage() {
             asChild
           >
             <a 
-              href="/api/auth/login?connection=google-oauth2"
+              href={googleLoginUrl}
               className="flex items-center justify-center gap-3"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -74,7 +110,7 @@ export default function LoginPage() {
             className="w-full h-12 text-sm font-medium" 
             asChild
           >
-            <a href="/api/auth/login">
+            <a href={loginUrl}>
               Continue with Email
             </a>
           </Button>

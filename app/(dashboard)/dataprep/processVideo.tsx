@@ -37,6 +37,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   const [loading, setLoading] = useState(true); // Start with loading true
   const [suspended, setSuspended] = useState(false);
   const [prefetching, setPrefetching] = useState(false); // Track if we're currently prefetching
+  const [nextImagesReady, setNextImagesReady] = useState(false); // Track if next pair images are preloaded
   const [imageLoadingStatesA, setImageLoadingStatesA] = useState<boolean[]>([]);
   const [imageLoadingStatesB, setImageLoadingStatesB] = useState<boolean[]>([]);
 
@@ -99,6 +100,37 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     }
   }, [imagePair]);
 
+  // Preload images for the next pair in the background
+  useEffect(() => {
+    if (!nextImagePair) {
+      setNextImagesReady(false);
+      return;
+    }
+
+    const allImages = [...nextImagePair.imagesA, ...nextImagePair.imagesB];
+    let loadedCount = 0;
+
+    const imagePromises = allImages.map((src) => {
+      return new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          loadedCount++;
+          resolve();
+        };
+        img.onerror = () => {
+          loadedCount++;
+          resolve(); // Still resolve even on error to avoid hanging
+        };
+        img.src = src;
+      });
+    });
+
+    Promise.all(imagePromises).then(() => {
+      console.log(`✅ Preloaded ${loadedCount}/${allImages.length} images for next pair`);
+      setNextImagesReady(true);
+    });
+  }, [nextImagePair]);
+
   // Add keyboard shortcuts for classification
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
@@ -159,7 +191,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
           onClassificationComplete();
           return;
         }
-        setLoading(false);
+        if (isPrefetch) {
+          setPrefetching(false);
+        } else {
+          setLoading(false);
+        }
         return;
       }
       const data = await res.json();
@@ -182,7 +218,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       if (!data || typeof data !== 'object') {
         console.error('Invalid response format - expected object');
         handleApiError({ message: 'Invalid response format from server' }, 'fetchNextVerificationPair');
-        setLoading(false);
+        if (isPrefetch) {
+          setPrefetching(false);
+        } else {
+          setLoading(false);
+        }
         return;
       }
 
@@ -201,7 +241,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         });
         console.error('Invalid response format - expected imagesA and imagesB arrays');
         handleApiError({ message: 'Server returned invalid image data format' }, 'fetchNextVerificationPair');
-        setLoading(false);
+        if (isPrefetch) {
+          setPrefetching(false);
+        } else {
+          setLoading(false);
+        }
         return;
       }
 
@@ -222,8 +266,10 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
           setPrefetching(false);
         } else {
           setImagePair(data);
-          // After setting the current pair, prefetch the next one
-          setTimeout(() => fetchNextVerificationPair(true), 100); // Small delay to avoid overwhelming the server
+          // After setting the current pair, prefetch the next one ONLY if we don't already have one
+          if (!nextImagePair && !prefetching) {
+            setTimeout(() => fetchNextVerificationPair(true), 100); // Small delay to avoid overwhelming the server
+          }
         }
       }
     } catch (error) {
@@ -282,7 +328,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       return;
     }
 
-    setLoading(true);
+    // Only show loading if we don't have a preloaded next pair ready
+    const hasPreloadedPair = nextImagePair && nextImagesReady;
+    if (!hasPreloadedPair) {
+      setLoading(true);
+    }
     clearError(); // Clear any previous errors
 
     try {
@@ -309,24 +359,30 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       if (responseData.next_images) {
         console.log('Received next images in classify response');
         setImagePair(responseData.next_images);
-        // Prefetch the next pair after setting this one
-        setTimeout(() => fetchNextVerificationPair(true), 100);
+        setLoading(false);
+        // Prefetch the next pair ONLY if we don't already have one
+        if (!nextImagePair && !prefetching) {
+          setTimeout(() => fetchNextVerificationPair(true), 100);
+        }
       } else if (nextImagePair) {
-        // Use the prefetched pair
-        console.log('Using prefetched pair');
+        // Use the prefetched pair (images are already loaded!)
+        console.log('Using prefetched pair (images ready:', nextImagesReady, ')');
         setImagePair(nextImagePair);
         setNextImagePair(null);
-        // Prefetch the next pair after setting this one
+        setNextImagesReady(false);
+        setLoading(false);
+        // Prefetch a new next pair since we just consumed the previous one
         setTimeout(() => fetchNextVerificationPair(true), 100);
       } else {
         console.log('No more images available');
         setImagePair(null);
+        setLoading(false);
       }
     } catch (error) {
       console.error('Failed to classify pair:', error);
       handleApiError(error, 'handleClassify');
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSkip = async () => {
@@ -336,7 +392,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       return;
     }
 
-    setLoading(true);
+    // Only show loading if we don't have a preloaded next pair ready
+    const hasPreloadedPair = nextImagePair && nextImagesReady;
+    if (!hasPreloadedPair) {
+      setLoading(true);
+    }
     clearError(); // Clear any previous errors
 
     try {
@@ -363,24 +423,30 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       if (responseData.next_images) {
         console.log('Received next images in skip response');
         setImagePair(responseData.next_images);
-        // Prefetch the next pair after setting this one
-        setTimeout(() => fetchNextVerificationPair(true), 100);
+        setLoading(false);
+        // Prefetch the next pair ONLY if we don't already have one
+        if (!nextImagePair && !prefetching) {
+          setTimeout(() => fetchNextVerificationPair(true), 100);
+        }
       } else if (nextImagePair) {
-        // Use the prefetched pair
-        console.log('Using prefetched pair');
+        // Use the prefetched pair (images are already loaded!)
+        console.log('Using prefetched pair (images ready:', nextImagesReady, ')');
         setImagePair(nextImagePair);
         setNextImagePair(null);
-        // Prefetch the next pair after setting this one
+        setNextImagesReady(false);
+        setLoading(false);
+        // Prefetch a new next pair since we just consumed the previous one
         setTimeout(() => fetchNextVerificationPair(true), 100);
       } else {
         console.log('No more images available');
         setImagePair(null);
+        setLoading(false);
       }
     } catch (error) {
       console.error('Failed to skip pair:', error);
       handleApiError(error, 'handleSkip');
+      setLoading(false);
     }
-    setLoading(false);
   };  const handleSuspend = async () => {
     setLoading(true);
     clearError(); // Clear any previous errors
@@ -397,6 +463,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       setSuspended(true);
       setImagePair(null);
       setNextImagePair(null);
+      setNextImagesReady(false);
     } catch (error) {
       console.error('Failed to suspend:', error);
       handleApiError(error, 'handleSuspend');

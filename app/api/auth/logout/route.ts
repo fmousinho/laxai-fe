@@ -6,13 +6,15 @@ export async function GET(request: NextRequest) {
     console.log('[LOGOUT] Starting logout process');
     const hasReturnTo = request.nextUrl.searchParams.has('returnTo');
 
-    if (!hasReturnTo) {
-      const defaultReturnTo = process.env.APP_BASE_URL
-        ? `${process.env.APP_BASE_URL.replace(/\/$/, '')}/login`
-        : new URL('/login', request.url).toString();
+      if (!hasReturnTo) {
+        const defaultReturnTo = process.env.APP_BASE_URL
+          ? process.env.APP_BASE_URL.replace(/\/$/, '')
+          : new URL('/', request.url).toString().replace(/\/$/, '');
 
-      request.nextUrl.searchParams.set('returnTo', defaultReturnTo);
-      console.log('[LOGOUT] Injected default returnTo:', defaultReturnTo);
+        console.log('[LOGOUT] Injecting default returnTo:', defaultReturnTo);
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.searchParams.set('returnTo', defaultReturnTo);
+        return NextResponse.redirect(redirectUrl);
     }
 
     const response = await auth0.middleware(request);
