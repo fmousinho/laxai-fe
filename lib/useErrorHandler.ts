@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from 'react';
+import { logger } from './logger';
 
 export interface ErrorState {
   message: string;
@@ -28,7 +29,7 @@ export function useErrorHandler(): UseErrorHandlerReturn {
   }, []);
 
   const handleApiError = useCallback((error: any, context?: string) => {
-    console.error(`API Error${context ? ` in ${context}` : ''}:`, error);
+    logger.error(`API Error${context ? ` in ${context}` : ''}`, error, 'API');
 
     let errorMessage = 'An unexpected error occurred';
     let errorDetails = error;

@@ -4,6 +4,7 @@ import { UploadState, AnalysingSubstateType } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Clock, Circle, Loader2 } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 // State machine types
 
@@ -208,7 +209,7 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
 
       if (currentPollingTaskIdRef.current && currentPollingTaskIdRef.current !== uploadState.analysisTaskId) {
         // Polling a different task, stop it first
-        console.log(`Switching poll from task ${currentPollingTaskIdRef.current} to ${uploadState.analysisTaskId}`);
+        logger.debug(`Switching poll from task ${currentPollingTaskIdRef.current} to ${uploadState.analysisTaskId}`, {}, 'Polling');
         stopPolling();
       }
 
@@ -260,12 +261,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
 
     try {
-      console.log('Polling progress for task:', taskId);
+      logger.debug('Polling progress for task', { taskId }, 'API');
       const response = await fetch(`/api/track/${taskId}/progress`);
 
       if (response.status === 200) {
         const data = await response.json();
-        console.log('Polled progress data:', data);
+        logger.debug('Polled progress data', data, 'API');
         if (data.status) {
           setAnalysingSubstate(data.status as AnalysingSubstateType);
           if (data.status === 'running' || data.status === 'completed') {
@@ -276,12 +277,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
           }
         }
       } else if (response.status === 404) {
-        console.error('Analysis task not found (404)');
+        logger.error('Analysis task not found (404)', { taskId }, 'API');
       } else {
-        console.error('API error:', response.status, response.statusText);
+        logger.error('API error polling progress', { status: response.status, statusText: response.statusText }, 'API');
       }
     } catch (error) {
-      console.error('Error polling progress:', error);
+      logger.error('Error polling progress', error, 'API');
       setErrorMessage(error instanceof Error ? error.message : 'Unknown error');
       setAnalysingSubstate('error');
     }

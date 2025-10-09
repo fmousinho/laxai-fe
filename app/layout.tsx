@@ -1,6 +1,7 @@
 
 import './globals.css';
 import { Analytics } from '@vercel/analytics/react';
+import { LoggerInitializer } from '@/components/LoggerInitializer';
 // ...existing imports...
 
 import type { Metadata } from 'next';
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
         <body className="flex min-h-screen w-full flex-col">
+          <LoggerInitializer />
           {children}
         </body>
         <Analytics />
