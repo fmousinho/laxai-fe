@@ -17,9 +17,8 @@ const COUNTDOWN_DURATION = 180; // 3 minutes
 const POLLING_INTERVAL = 5000; // 5 seconds
 
 export function AnalysingState({ uploadState, setUploadState }: AnalysingStateProps) {
-  // Helper functions for localStorage - using endTime instead of startTime + duration
-  // Use video file name as key instead of task ID, since task ID can change on retries
-  // Helper function to get stored countdown from localStorage
+  // Helper functions for countdown persistence - using endTime instead of startTime + duration
+  // Use video file name as key since it persists across navigation
   const getStoredCountdown = (fileName: string): number | null => {
     if (typeof window === 'undefined') return null;
     
@@ -36,6 +35,30 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     } catch (error) {
       console.error('Error parsing stored countdown:', error);
       return null;
+    }
+  };
+
+  const storeCountdown = (fileName: string, duration: number) => {
+    try {
+      // Check if we already have a stored countdown with endTime
+      const existing = localStorage.getItem(`analysis_countdown_${fileName}`);
+      
+      if (!existing) {
+        // First time storing - calculate end time from now + duration
+        const endTime = Date.now() + (duration * 1000);
+        localStorage.setItem(`analysis_countdown_${fileName}`, JSON.stringify({ endTime }));
+      }
+      // If it already exists, don't update it - the end time is fixed
+    } catch (error) {
+      console.error('Error storing countdown in localStorage:', error);
+    }
+  };
+
+  const clearStoredCountdown = (fileName: string) => {
+    try {
+      localStorage.removeItem(`analysis_countdown_${fileName}`);
+    } catch (error) {
+      console.error('Error clearing countdown from localStorage:', error);
     }
   };
 
@@ -59,86 +82,10 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
   // Track which task ID we're currently polling to prevent duplicate polls
   const currentPollingTaskIdRef = useRef<string | null>(null);
 
-  // Helper functions defined BEFORE useEffects that use them
-  const getStoredSubstate = (): AnalysingSubstateType | null => {
-    try {
-      const stored = localStorage.getItem(`analysis_substate_${uploadState.analysisTaskId}`);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Error reading substate from localStorage:', error);
-    }
-    return null;
-  };
-
-  const clearStoredSubstate = () => {
-    try {
-      localStorage.removeItem(`analysis_substate_${uploadState.analysisTaskId}`);
-    } catch (error) {
-      console.error('Error clearing substate from localStorage:', error);
-    }
-  };
-
-  const storeSubstate = (substate: AnalysingSubstateType) => {
-    try {
-      if (uploadState.analysisTaskId) {
-        localStorage.setItem(`analysis_substate_${uploadState.analysisTaskId}`, JSON.stringify(substate));
-      }
-    } catch (error) {
-      console.error('Error storing substate in localStorage:', error);
-    }
-  };
-
-  // Helper function to store countdown in localStorage - stores absolute end time
-  // Use video file name as key instead of task ID
-  const storeCountdown = (fileName: string, duration: number) => {
-    try {
-      // Check if we already have a stored countdown with endTime
-      const existing = localStorage.getItem(`analysis_countdown_${fileName}`);
-      
-      if (!existing) {
-        // First time storing - calculate end time from now + duration
-        const endTime = Date.now() + (duration * 1000);
-        localStorage.setItem(`analysis_countdown_${fileName}`, JSON.stringify({ endTime }));
-      }
-      // If it already exists, don't update it - the end time is fixed
-    } catch (error) {
-      console.error('Error storing countdown in localStorage:', error);
-    }
-  };
-
-  // Helper function to clear countdown from localStorage
-  const clearStoredCountdown = (fileName: string) => {
-    try {
-      localStorage.removeItem(`analysis_countdown_${fileName}`);
-    } catch (error) {
-      console.error('Error clearing countdown from localStorage:', error);
-    }
-  };
-
-  // Initialize component state on mount and handle missing task ID
+  // Initialize component state on mount
   useEffect(() => {
-    const storedSubstate = uploadState.analysisTaskId ? getStoredSubstate() : null;
-    const initialSubstate = storedSubstate || 'not_started';
+    const initialSubstate = uploadState.analysisTaskId ? 'not_started' : 'not_started';
     setAnalysingSubstate(initialSubstate);
-
-    // ONLY retry if we have a task ID in localStorage but not in state
-    // This handles the case where user refreshed the page during analysis
-    // DO NOT retry on initial mount when transitioning from ready -> analysing
-    // (the parent component creates the task via handleVideoAnalysis)
-    const fileName = uploadState.videoFile?.fileName;
-    const cachedTaskId = fileName && typeof window !== 'undefined' 
-      ? localStorage.getItem(`analysis_task_${fileName}`) 
-      : null;
-    
-    if (cachedTaskId && (!uploadState.analysisTaskId || uploadState.analysisTaskId === '')) {
-      console.log('Found cached task ID after page refresh, recovering:', cachedTaskId);
-      setUploadState(prev => ({
-        ...prev,
-        analysisTaskId: cachedTaskId
-      }));
-    }
 
     // Cleanup on unmount - ensure polling timeout is cleared
     return () => {
@@ -164,16 +111,12 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
     }
   }, [countdown])
 
-  // Note: We don't need to update localStorage on every countdown tick anymore
-  // The endTime is stored once and we calculate remaining time from it
-
 
 
   useEffect(() => {
     switch (analysingSubstate) {
 
       case 'not_started':
-        storeSubstate('not_started');
         if (uploadState.analysisTaskId) {
           setShouldPoll(true);
           shouldPollRef.current = true;
@@ -194,7 +137,6 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         }
         break;
       case 'running':
-        storeSubstate('running');
         setShouldPoll(true);
         shouldPollRef.current = true;
         setCountdown(null);
@@ -204,14 +146,11 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         }
         break;
       case 'completed':
-        clearStoredSubstate();
         setShouldPoll(false);
         shouldPollRef.current = false;
         // Clear countdown when analysis completes
         if (uploadState.videoFile?.fileName) {
           clearStoredCountdown(uploadState.videoFile.fileName);
-          // Clear cached task ID since analysis is complete
-          localStorage.removeItem(`analysis_task_${uploadState.videoFile.fileName}`);
         }
         setUploadState({
           type: 'analysis_complete',
@@ -220,14 +159,11 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         });
         break;
       case 'error':
-        clearStoredSubstate();
         setShouldPoll(false);
         shouldPollRef.current = false;
         // Clear countdown when analysis errors
         if (uploadState.videoFile?.fileName) {
           clearStoredCountdown(uploadState.videoFile.fileName);
-          // Clear cached task ID since analysis failed
-          localStorage.removeItem(`analysis_task_${uploadState.videoFile.fileName}`);
         }
         setUploadState({
           type: "failed_analysis",
@@ -237,14 +173,11 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
         });
         break;
       case 'cancelled':
-        clearStoredSubstate();
         setShouldPoll(false);
         shouldPollRef.current = false;
         // Clear countdown when analysis is cancelled
         if (uploadState.videoFile?.fileName) {
           clearStoredCountdown(uploadState.videoFile.fileName);
-          // Clear cached task ID since analysis was cancelled
-          localStorage.removeItem(`analysis_task_${uploadState.videoFile.fileName}`);
         }
         setUploadState({
           type: "failed_analysis",
@@ -487,12 +420,6 @@ export function AnalysingState({ uploadState, setUploadState }: AnalysingStatePr
                 }
                 // Clear current polling task ref
                 currentPollingTaskIdRef.current = null;
-                // Clear countdown from localStorage
-                if (uploadState.videoFile?.fileName) {
-                  clearStoredCountdown(uploadState.videoFile.fileName);
-                  // Clear cached task ID since analysis was cancelled
-                  localStorage.removeItem(`analysis_task_${uploadState.videoFile.fileName}`);
-                }
                 // Update state to cancelled status
                 setUploadState({
                   type: 'failed_analysis',
