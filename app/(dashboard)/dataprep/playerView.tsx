@@ -89,15 +89,17 @@ export default function PlayerCrop({
 
   return (
     <div className="relative group flex-shrink-0" style={{ width: containerWidth }}>
-      <img
-        ref={handleImageRef}
-        src={src}
-        alt="data"
-        className="object-contain rounded border flex-shrink-0"
-        style={{ height, width: containerWidth }}
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-      />
+      {!loading && (
+        <img
+          ref={handleImageRef}
+          src={src}
+          alt="data"
+          className="object-contain rounded border flex-shrink-0"
+          style={{ height, width: containerWidth }}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+        />
+      )}
       {loading && (
         <div
           className="absolute inset-0 rounded border bg-gray-100 flex items-center justify-center overflow-hidden"

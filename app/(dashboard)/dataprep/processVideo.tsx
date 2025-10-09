@@ -611,7 +611,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
             <TrackView
               images={imagePair?.imagesA || []}
               ref={listARef}
-              trackId={imagePair?.group1_id}
+              trackId={imagePair?.group1_id ?? -1}
               loadingStates={imageLoadingStatesA}
               setLoadingStates={setImageLoadingStatesA}
               onSplit={handleSplitTrack}
@@ -620,7 +620,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
             <TrackView
               images={imagePair?.imagesB || []}
               ref={listBRef}
-              trackId={imagePair?.group2_id}
+              trackId={imagePair?.group2_id ?? -2}
               loadingStates={imageLoadingStatesB}
               setLoadingStates={setImageLoadingStatesB}
               onSplit={handleSplitTrack}

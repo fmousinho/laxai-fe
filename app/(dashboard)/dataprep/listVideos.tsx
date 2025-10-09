@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,7 @@ import {
 export type VideoFile = {
   fileName: string;
   signedUrl: string;
+  thumbnailUrl?: string;
 };
 
 interface ListVideosProps {
@@ -31,12 +32,21 @@ interface ListVideosProps {
 export default function ListVideos({ onPrepareVideo }: ListVideosProps) {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
+  const hasFetchedRef = useRef(false);
 
   // Fetch videos on mount
   useEffect(() => {
+    // Prevent duplicate API calls
+    if (hasFetchedRef.current) {
+      console.log('ListVideos: Skipping duplicate fetch');
+      return;
+    }
+    
     const fetchVideos = async () => {
+      hasFetchedRef.current = true;
       setLoadingVideos(true);
       try {
+        console.log('ListVideos: Fetching videos from GCS...');
         const { data } = await axios.get('/api/gcs/list_video?folder=imported');
         console.log('GCS list_video response:', data);
         setVideos(data.files || []);
@@ -78,11 +88,21 @@ export default function ListVideos({ onPrepareVideo }: ListVideosProps) {
               {videos.map((video, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    <video
-                      src={video.signedUrl}
-                      className="w-16 h-12 object-cover rounded"
-                      muted
-                    />
+                    {video.thumbnailUrl ? (
+                      <img
+                        src={video.thumbnailUrl}
+                        alt={`${video.fileName} thumbnail`}
+                        className="w-16 h-12 object-cover rounded"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <video
+                        src={video.signedUrl}
+                        className="w-16 h-12 object-cover rounded"
+                        muted
+                        preload="metadata"
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="font-medium">
                     {video.fileName}
