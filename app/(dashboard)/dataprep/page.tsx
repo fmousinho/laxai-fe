@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from 'next/navigation';
 import ListVideos, { VideoFile } from './listVideos';
 import ProcessVideo from './processVideo';
@@ -10,7 +10,7 @@ import ClassificationComplete from './classificationComplete';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
-export default function DataPrepPage() {
+function DataPrepContent() {
   const [view, setView] = useState<'list' | 'process' | 'demo' | 'tracking' | 'classificationComplete'>('list');
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -103,5 +103,20 @@ export default function DataPrepPage() {
         <TrackViewDemo />
       )}
     </div>
+  );
+}
+
+export default function DataPrepPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full max-w-6xl mx-auto p-4">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin mr-2" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    }>
+      <DataPrepContent />
+    </Suspense>
   );
 }
