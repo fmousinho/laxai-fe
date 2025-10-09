@@ -3,7 +3,6 @@ import Link from 'next/link';
 import {
   Home,
   LineChart,
-  Package,
   Package2,
   PanelLeft,
   Settings,
@@ -81,10 +80,6 @@ function DesktopNav() {
           <ShoppingCart className="h-5 w-5" />
         </NavItem>
 
-        <NavItem href="/" label="Products">
-          <Package className="h-5 w-5" />
-        </NavItem>
-
         <NavItem href="#" label="Analytics">
           <LineChart className="h-5 w-5" />
         </NavItem>
@@ -148,13 +143,6 @@ function MobileNav() {
             Orders
           </Link>
           <Link
-            href="#"
-            className="flex items-center gap-4 px-2.5 text-foreground"
-          >
-            <Package className="h-5 w-5" />
-            Products
-          </Link>
-            <Link
             href="#"
             className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
           >
