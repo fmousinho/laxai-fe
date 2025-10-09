@@ -33,6 +33,7 @@ import Providers from './providers';
 import { NavItem } from './nav-item';
 import { SearchInput } from './search';
 import { usePathname } from 'next/navigation';
+import { AuthGuard } from '@/components/AuthGuard';
 
 export default function DashboardLayout({
   children
@@ -51,7 +52,9 @@ export default function DashboardLayout({
             <User />
           </header>
           <main className="grid flex-1 items-start gap-2 p-4 sm:px-6 sm:py-0 md:gap-4 bg-muted/40">
-            {children}
+            <AuthGuard>
+              {children}
+            </AuthGuard>
           </main>
         </div>
         <Analytics />

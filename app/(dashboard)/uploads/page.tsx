@@ -7,6 +7,7 @@ import { ErrorPage } from '@/components/ErrorPage';
 // import { VideoAnalysisProgress } from './VideoAnalysisProgress';
 import { RuntimeErrorBoundary } from './RuntimeErrorBoundary';
 import { UploadState, UploadStateType, VideoFile } from './types';
+import { useUser } from '@auth0/nextjs-auth0';
 import {
   InitialState,
   UploadingState,
@@ -21,6 +22,28 @@ import {
 
 
 export default function Uploads() {
+  const { user, isLoading } = useUser();
+
+  // Component-level authentication check (defensive programming)
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Authentication Required</h2>
+          <p className="text-muted-foreground">Please log in to access the uploads page.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [isStateRestored, setIsStateRestored] = useState(false);
   const [hasCheckedExistingFiles, setHasCheckedExistingFiles] = useState(false);
   const hasCheckedRef = useRef(false);

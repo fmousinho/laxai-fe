@@ -18,6 +18,10 @@ import Link from 'next/link';
 export default function User() {
   const { user, isLoading } = useUser();
 
+  const handleSignOut = () => {
+    window.location.href = '/api/auth/logout';
+  };
+
   if (isLoading) {
     return null; // Or a loading spinner
   }
@@ -46,8 +50,8 @@ export default function User() {
         <DropdownMenuItem>Support</DropdownMenuItem>
         <DropdownMenuSeparator />
         {user ? (
-          <DropdownMenuItem>
-            <Link href="/api/auth/logout">Sign Out</Link>
+          <DropdownMenuItem onClick={handleSignOut}>
+            Sign Out
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem>
