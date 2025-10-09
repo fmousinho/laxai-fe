@@ -68,7 +68,7 @@ export default function PlayerCrop({
     onError?.();
   };
 
-  const containerWidth = calculatedWidth || 200; // Default width before image loads
+  const containerWidth = calculatedWidth || (height * 1.5); // Default to 3:2 aspect ratio before image loads
 
   return (
     <div className="relative group flex-shrink-0" style={{ width: containerWidth }}>
@@ -82,10 +82,12 @@ export default function PlayerCrop({
       />
       {loading && (
         <div
-          className="absolute inset-0 rounded border bg-gray-200 animate-pulse flex items-center justify-center"
+          className="absolute inset-0 rounded border bg-gray-100 flex items-center justify-center overflow-hidden"
           style={{ height, width: containerWidth }}
         >
-          <div className="text-xs text-gray-500">Loading...</div>
+          <div className="w-full h-full p-1">
+            <div className="w-full h-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded animate-pulse"></div>
+          </div>
         </div>
       )}
       <Tooltip>

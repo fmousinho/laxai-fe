@@ -85,6 +85,14 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     }
   }, [started, loading, imagePair, video.fileName]);
 
+  // Initialize loading states when imagePair changes
+  useEffect(() => {
+    if (imagePair) {
+      setImageLoadingStatesA(new Array(imagePair.imagesA.length).fill(true));
+      setImageLoadingStatesB(new Array(imagePair.imagesB.length).fill(true));
+    }
+  }, [imagePair]);
+
   const fetchPair = async () => {
     await fetchNextVerificationPair();
   };
@@ -114,7 +122,14 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       const data = await res.json();
-      console.log('Received next verification pair data:', data);
+      console.log('Received next verification pair data:', JSON.stringify(data, null, 2));
+
+      // Check if classification is complete
+      if (data.status === 'complete') {
+        console.log('Classification complete - all tracks have been assigned to players');
+        onClassificationComplete();
+        return;
+      }
 
       // Validate the response format
       if (!data || typeof data !== 'object') {
@@ -129,8 +144,10 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
           video: video.fileName,
           hasImagesA: !!data.imagesA,
           imagesA_isArray: Array.isArray(data.imagesA),
+          imagesA_length: data.imagesA?.length || 'N/A',
           hasImagesB: !!data.imagesB,
           imagesB_isArray: Array.isArray(data.imagesB),
+          imagesB_length: data.imagesB?.length || 'N/A',
           fullResponse: data,
           timestamp: new Date().toISOString(),
           troubleshooting: 'The API response does not contain valid imagesA and imagesB arrays. Check the backend API implementation.'
@@ -142,10 +159,17 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       }
 
       if (data.imagesA.length === 0 || data.imagesB.length === 0) {
-        console.log('Classification complete - no more images available for verification');
+        console.log('Classification complete - no more images available for verification', {
+          imagesA_length: data.imagesA.length,
+          imagesB_length: data.imagesB.length,
+          total_pairs: data.total_pairs,
+          verified_pairs: data.verified_pairs,
+          status: data.status
+        });
         onClassificationComplete();
         return;
       } else {
+        console.log('Setting image pair with', data.imagesA.length, 'imagesA and', data.imagesB.length, 'imagesB');
         setImagePair(data);
       }
     } catch (error) {
@@ -209,6 +233,13 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       }
       const responseData = await res.json();
       
+      // Check if classification is complete
+      if (responseData.status === 'complete') {
+        console.log('Classification complete - all tracks have been assigned to players');
+        onClassificationComplete();
+        return;
+      }
+      
       // Check if we got next images in the response
       if (responseData.next_images) {
         console.log('Received next images in classify response');
@@ -240,6 +271,13 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       const responseData = await res.json();
+      
+      // Check if classification is complete
+      if (responseData.status === 'complete') {
+        console.log('Classification complete - all tracks have been assigned to players');
+        onClassificationComplete();
+        return;
+      }
       
       // Check if we got next images in the response
       if (responseData.next_images) {
@@ -388,14 +426,14 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         <>
           <h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
           {loading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center" style={{ height: '564px' }}>
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
                 <p className="text-sm text-muted-foreground">Loading next images...</p>
               </div>
             </div>
           ) : (
-            <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden">
+            <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden" style={{ height: '564px', minHeight: '564px' }}>
               <TrackView
                 images={imagePair.imagesA}
                 ref={listARef}

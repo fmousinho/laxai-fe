@@ -72,6 +72,8 @@ export default function TrackView({
           boxSizing: 'border-box',
           flexShrink: 0,
           height: height,
+          minHeight: height,
+          maxHeight: height,
         }}
       >
         <span className="text-gray-500">No images available</span>
@@ -90,6 +92,8 @@ export default function TrackView({
         scrollbarWidth: 'thin',
         WebkitOverflowScrolling: 'touch',
         height: height,
+        minHeight: height,
+        maxHeight: height,
       }}
     >
       {images.map((src, i) => {
