@@ -35,6 +35,11 @@ interface TrackViewProps {
    * Optional ref to attach to the container element.
    */
   ref?: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Number of skeleton placeholders to show when no images are available.
+   * Used during initial loading before images are fetched.
+   */
+  skeletonCount?: number;
 }
 
 /**
@@ -50,6 +55,7 @@ export default function TrackView({
   onSplit,
   height = 250,
   ref,
+  skeletonCount,
 }: TrackViewProps) {
   const imageRefs = useRef<(HTMLImageElement | null)[]>([]);
 
@@ -110,7 +116,41 @@ export default function TrackView({
     };
   }, [images, trackId, loadingStates, setLoadingStates]);
 
-  console.log('TrackView for track', trackId, 'has', images?.length || 0, 'images');
+  console.log('TrackView for track', trackId, 'has', images?.length || 0, 'images, skeletonCount:', skeletonCount);
+
+  // If skeletonCount is provided and we have no images, show skeleton placeholders
+  if (skeletonCount && skeletonCount > 0 && (!images || images.length === 0)) {
+    console.log(`Showing ${skeletonCount} skeleton placeholders for track ${trackId}`);
+    return (
+      <div
+        ref={ref}
+        className="rounded-2xl bg-white shadow-md border border-gray-200 p-3 my-4 flex gap-2 w-full box-border overflow-x-auto overflow-y-hidden flex-nowrap"
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          flexShrink: 0,
+          scrollbarWidth: 'thin',
+          WebkitOverflowScrolling: 'touch',
+          height: height,
+          minHeight: height,
+          maxHeight: height,
+        }}
+      >
+        {Array.from({ length: skeletonCount }, (_, i) => (
+          <PlayerCrop
+            key={`skeleton-${i}`}
+            src="" // Empty src for skeleton
+            cropImageName={`skeleton-${i}`}
+            trackId={trackId || 0}
+            onSplit={onSplit}
+            loading={true} // Always loading for skeletons
+            height={height}
+            skeletonWidth={160} // Fixed width between 130-200px for skeletons
+          />
+        ))}
+      </div>
+    );
+  }
 
   if (!images || !Array.isArray(images) || images.length === 0) {
     console.error('🚨 DATAPREP TRACKVIEW ERROR: TrackView received empty or invalid images array', {

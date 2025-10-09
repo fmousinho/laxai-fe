@@ -45,6 +45,11 @@ interface PlayerCropProps {
    * Optional callback to set a ref to the image element.
    */
   imageRef?: (el: HTMLImageElement | null) => void;
+  /**
+   * Fixed width for skeleton placeholders when loading is true.
+   * If not provided, uses aspect ratio calculation.
+   */
+  skeletonWidth?: number;
 }
 
 export default function PlayerCrop({
@@ -57,6 +62,7 @@ export default function PlayerCrop({
   onLoad,
   onError,
   imageRef,
+  skeletonWidth,
 }: PlayerCropProps) {
   const [calculatedWidth, setCalculatedWidth] = useState<number | null>(null);
 
@@ -77,7 +83,9 @@ export default function PlayerCrop({
     imageRef?.(img);
   };
 
-  const containerWidth = calculatedWidth || (height * 1.5); // Default to 3:2 aspect ratio before image loads
+  const containerWidth = loading && skeletonWidth 
+    ? skeletonWidth 
+    : (calculatedWidth || (height * 1.5)); // Default to 3:2 aspect ratio before image loads
 
   return (
     <div className="relative group flex-shrink-0" style={{ width: containerWidth }}>
@@ -96,7 +104,23 @@ export default function PlayerCrop({
           style={{ height, width: containerWidth }}
         >
           <div className="w-full h-full p-1">
-            <div className="w-full h-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded animate-pulse"></div>
+            <div 
+              className="w-full h-full bg-gray-200 rounded relative overflow-hidden"
+            >
+              <div 
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-pulse"
+                style={{
+                  animation: 'shimmer 1.5s ease-in-out infinite',
+                  transform: 'translateX(-100%)'
+                }}
+              />
+              <style jsx>{`
+                @keyframes shimmer {
+                  0% { transform: translateX(-100%); }
+                  100% { transform: translateX(100%); }
+                }
+              `}</style>
+            </div>
           </div>
         </div>
       )}

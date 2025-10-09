@@ -604,65 +604,71 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         </div>
       )}
 
-      {started && imagePair && (
+      {started && (
         <>
           <h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
           <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden" style={{ height: '564px', minHeight: '564px' }}>
             <TrackView
-              images={imagePair.imagesA}
+              images={imagePair?.imagesA || []}
               ref={listARef}
-              trackId={imagePair.group1_id}
+              trackId={imagePair?.group1_id}
               loadingStates={imageLoadingStatesA}
               setLoadingStates={setImageLoadingStatesA}
               onSplit={handleSplitTrack}
+              skeletonCount={imagePair ? undefined : 4} // Show 4 skeletons when no imagePair yet
             />
             <TrackView
-              images={imagePair.imagesB}
+              images={imagePair?.imagesB || []}
               ref={listBRef}
-              trackId={imagePair.group2_id}
+              trackId={imagePair?.group2_id}
               loadingStates={imageLoadingStatesB}
               setLoadingStates={setImageLoadingStatesB}
               onSplit={handleSplitTrack}
+              skeletonCount={imagePair ? undefined : 2} // Show 2 skeletons when no imagePair yet
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
-            <button
-              className="w-full px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-50"
-              onClick={() => handleClassify("same")}
-              disabled={loading}
-            >
-              <u>S</u>ame
-            </button>
-            <button
-              className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
-              onClick={() => handleClassify("different")}
-              disabled={loading}
-            >
-              <u>D</u>ifferent
-            </button>
-            <button
-              className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
-              onClick={handleSkip}
-              disabled={loading}
-            >
-              S<u>k</u>ip
-            </button>
-          </div>
+          {imagePair && (
+            <>
+              <div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
+                <button
+                  className="w-full px-6 py-3 rounded-lg bg-green-600 text-white font-semibold shadow hover:bg-green-700 transition disabled:opacity-50"
+                  onClick={() => handleClassify("same")}
+                  disabled={loading}
+                >
+                  <u>S</u>ame
+                </button>
+                <button
+                  className="w-full px-6 py-3 rounded-lg bg-red-600 text-white font-semibold shadow hover:bg-red-700 transition disabled:opacity-50"
+                  onClick={() => handleClassify("different")}
+                  disabled={loading}
+                >
+                  <u>D</u>ifferent
+                </button>
+                <button
+                  className="w-full px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold shadow hover:bg-amber-600 transition disabled:opacity-50"
+                  onClick={handleSkip}
+                  disabled={loading}
+                >
+                  S<u>k</u>ip
+                </button>
+              </div>
 
-          <div className="mt-2 text-center text-sm text-muted-foreground">
-            Keyboard shortcuts: <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">S</kbd> Same • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">D</kbd> Different • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">K</kbd> Skip
-          </div>
+              <div className="mt-2 text-center text-sm text-muted-foreground">
+                Keyboard shortcuts: <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">S</kbd> Same • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">D</kbd> Different • <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">K</kbd> Skip
+              </div>
 
-          <div className="mt-10">
-            <button
-              className="px-6 py-2 rounded-full bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
-              onClick={handleSuspend}
-              disabled={loading}
-            >
-              Suspend Classification
-            </button>
-          </div>
+              <div className="mt-10">
+                <button
+                  className="px-6 py-2 rounded-full bg-gray-200 text-gray-700 font-medium hover:bg-gray-300 transition"
+                  onClick={handleSuspend}
+                  disabled={loading}
+                >
+                  Suspend Classification
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
 
