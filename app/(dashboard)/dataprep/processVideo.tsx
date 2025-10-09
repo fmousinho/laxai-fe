@@ -95,10 +95,27 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   // Initialize loading states when imagePair changes
   useEffect(() => {
     if (imagePair) {
+      console.log(`🎯 Setting up loading states for new imagePair: ${imagePair.imagesA.length}A + ${imagePair.imagesB.length}B images`);
       setImageLoadingStatesA(new Array(imagePair.imagesA.length).fill(true));
       setImageLoadingStatesB(new Array(imagePair.imagesB.length).fill(true));
+      setLoading(true); // Keep loading true until all images load
     }
   }, [imagePair]);
+
+  // Set loading to false when all images have loaded
+  useEffect(() => {
+    if (imagePair && imageLoadingStatesA.length > 0 && imageLoadingStatesB.length > 0) {
+      const allALoaded = imageLoadingStatesA.every(state => !state);
+      const allBLoaded = imageLoadingStatesB.every(state => !state);
+      console.log(`🔄 Loading check - A: ${imageLoadingStatesA.length} images, all loaded: ${allALoaded}`);
+      console.log(`🔄 Loading check - B: ${imageLoadingStatesB.length} images, all loaded: ${allBLoaded}`);
+      console.log(`🔄 Loading check - Current loading state: ${loading}`);
+      if (allALoaded && allBLoaded) {
+        console.log(`✅ All images loaded, setting loading to false`);
+        setLoading(false);
+      }
+    }
+  }, [imageLoadingStatesA, imageLoadingStatesB, imagePair]);
 
   // Preload images for the next pair in the background
   useEffect(() => {
@@ -270,6 +287,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
           if (!nextImagePair && !prefetching) {
             setTimeout(() => fetchNextVerificationPair(true), 100); // Small delay to avoid overwhelming the server
           }
+          // Don't set loading to false here - let the useEffect handle it when images load
         }
       }
     } catch (error) {
@@ -279,9 +297,8 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     
     if (isPrefetch) {
       setPrefetching(false);
-    } else {
-      setLoading(false);
     }
+    // For non-prefetch, loading is managed by the useEffect when images load
   };
 
   const handleStart = async () => {
@@ -370,6 +387,9 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         setImagePair(nextImagePair);
         setNextImagePair(null);
         setNextImagesReady(false);
+        // Since images are preloaded, set loading states to false immediately
+        setImageLoadingStatesA(new Array(nextImagePair.imagesA.length).fill(false));
+        setImageLoadingStatesB(new Array(nextImagePair.imagesB.length).fill(false));
         setLoading(false);
         // Prefetch a new next pair since we just consumed the previous one
         setTimeout(() => fetchNextVerificationPair(true), 100);
@@ -434,6 +454,9 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         setImagePair(nextImagePair);
         setNextImagePair(null);
         setNextImagesReady(false);
+        // Since images are preloaded, set loading states to false immediately
+        setImageLoadingStatesA(new Array(nextImagePair.imagesA.length).fill(false));
+        setImageLoadingStatesB(new Array(nextImagePair.imagesB.length).fill(false));
         setLoading(false);
         // Prefetch a new next pair since we just consumed the previous one
         setTimeout(() => fetchNextVerificationPair(true), 100);
@@ -464,6 +487,8 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       setImagePair(null);
       setNextImagePair(null);
       setNextImagesReady(false);
+      // Navigate back to the list view after suspending
+      onBackToList();
     } catch (error) {
       console.error('Failed to suspend:', error);
       handleApiError(error, 'handleSuspend');
@@ -582,33 +607,24 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       {started && imagePair && (
         <>
           <h2 className="text-lg font-semibold mt-2 mb-1 text-center">Are these images from the same player?</h2>
-          {loading ? (
-            <div className="flex items-center justify-center" style={{ height: '564px' }}>
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Loading next images...</p>
-              </div>
-            </div>
-          ) : (
-            <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden" style={{ height: '564px', minHeight: '564px' }}>
-              <TrackView
-                images={imagePair.imagesA}
-                ref={listARef}
-                trackId={imagePair.group1_id}
-                loadingStates={imageLoadingStatesA}
-                setLoadingStates={setImageLoadingStatesA}
-                onSplit={handleSplitTrack}
-              />
-              <TrackView
-                images={imagePair.imagesB}
-                ref={listBRef}
-                trackId={imagePair.group2_id}
-                loadingStates={imageLoadingStatesB}
-                setLoadingStates={setImageLoadingStatesB}
-                onSplit={handleSplitTrack}
-              />
-            </div>
-          )}
+          <div className="transition-opacity duration-300 ease-in-out w-full overflow-hidden" style={{ height: '564px', minHeight: '564px' }}>
+            <TrackView
+              images={imagePair.imagesA}
+              ref={listARef}
+              trackId={imagePair.group1_id}
+              loadingStates={imageLoadingStatesA}
+              setLoadingStates={setImageLoadingStatesA}
+              onSplit={handleSplitTrack}
+            />
+            <TrackView
+              images={imagePair.imagesB}
+              ref={listBRef}
+              trackId={imagePair.group2_id}
+              loadingStates={imageLoadingStatesB}
+              setLoadingStates={setImageLoadingStatesB}
+              onSplit={handleSplitTrack}
+            />
+          </div>
 
           <div className="grid grid-cols-3 gap-6 mt-4 w-full max-w-xl">
             <button

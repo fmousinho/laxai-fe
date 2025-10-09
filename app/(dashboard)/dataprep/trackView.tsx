@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PlayerCrop from './playerView';
 
 /**
@@ -51,6 +51,65 @@ export default function TrackView({
   height = 250,
   ref,
 }: TrackViewProps) {
+  const imageRefs = useRef<(HTMLImageElement | null)[]>([]);
+
+  // Check if images have loaded after a delay as a fallback
+  useEffect(() => {
+    if (!images || images.length === 0) return;
+
+    console.log(`🔍 Setting up fallback checks for ${images.length} images in track ${trackId}`);
+
+    const checkImagesLoaded = () => {
+      console.log(`🔍 Checking ${images.length} images for track ${trackId}...`);
+      images.forEach((src, i) => {
+        const img = imageRefs.current[i];
+        console.log(`🔍 Image ${i} ref:`, img ? 'exists' : 'null', 'loadingState:', loadingStates[i]);
+        if (img && loadingStates[i]) {
+          console.log(`🔍 Image ${i} - complete: ${img.complete}, naturalWidth: ${img.naturalWidth}, naturalHeight: ${img.naturalHeight}`);
+          // Check if image has natural dimensions (indicating it loaded)
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            console.log(`✅ Image ${i} for track ${trackId} has dimensions ${img.naturalWidth}x${img.naturalHeight}, marking as loaded`);
+            setLoadingStates(prev => {
+              const newStates = [...prev];
+              newStates[i] = false;
+              return newStates;
+            });
+          } else if (img.complete && img.naturalWidth === 0) {
+            // Image failed to load (complete but no dimensions)
+            console.warn(`❌ Image ${i} for track ${trackId} failed to load (complete but no dimensions), marking as loaded`);
+            setLoadingStates(prev => {
+              const newStates = [...prev];
+              newStates[i] = false;
+              return newStates;
+            });
+          } else if (img.complete) {
+            // Image is complete but we already checked dimensions above
+            console.log(`ℹ️ Image ${i} for track ${trackId} is complete but no action needed`);
+          } else {
+            console.log(`⏳ Image ${i} for track ${trackId} still loading...`);
+          }
+        } else if (!img) {
+          console.warn(`⚠️ Image ${i} ref not available yet`);
+        }
+      });
+    };
+
+    // Check after 3 seconds, then again after 8 seconds as final fallback
+    const timeout1 = setTimeout(() => {
+      console.log(`🔍 Running 3-second fallback check for track ${trackId}`);
+      checkImagesLoaded();
+    }, 3000);
+    const timeout2 = setTimeout(() => {
+      console.log(`🔍 Running 8-second fallback check for track ${trackId}`);
+      checkImagesLoaded();
+    }, 8000);
+
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+    };
+  }, [images, trackId, loadingStates, setLoadingStates]);
+
   console.log('TrackView for track', trackId, 'has', images?.length || 0, 'images');
 
   if (!images || !Array.isArray(images) || images.length === 0) {
@@ -112,6 +171,7 @@ export default function TrackView({
             trackId={trackId!}
             onSplit={onSplit}
             loading={loadingStates[i]}
+            imageRef={(el) => { imageRefs.current[i] = el; }}
             onLoad={() => {
               console.log(`Image ${i} for track ${trackId} loaded successfully`);
               setLoadingStates(prev => {

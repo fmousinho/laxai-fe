@@ -41,6 +41,10 @@ interface PlayerCropProps {
    * Optional callback function called when the image fails to load.
    */
   onError?: () => void;
+  /**
+   * Optional callback to set a ref to the image element.
+   */
+  imageRef?: (el: HTMLImageElement | null) => void;
 }
 
 export default function PlayerCrop({
@@ -52,6 +56,7 @@ export default function PlayerCrop({
   loading,
   onLoad,
   onError,
+  imageRef,
 }: PlayerCropProps) {
   const [calculatedWidth, setCalculatedWidth] = useState<number | null>(null);
 
@@ -68,11 +73,16 @@ export default function PlayerCrop({
     onError?.();
   };
 
+  const handleImageRef = (img: HTMLImageElement | null) => {
+    imageRef?.(img);
+  };
+
   const containerWidth = calculatedWidth || (height * 1.5); // Default to 3:2 aspect ratio before image loads
 
   return (
     <div className="relative group flex-shrink-0" style={{ width: containerWidth }}>
       <img
+        ref={handleImageRef}
         src={src}
         alt="data"
         className="object-contain rounded border flex-shrink-0"
