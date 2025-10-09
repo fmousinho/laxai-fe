@@ -19,17 +19,19 @@ export default function User() {
   const { user, isLoading } = useUser();
 
   const handleSignOut = () => {
-    // Clear client-side caches before redirecting
-    localStorage.removeItem('auth0.is.authenticated');
-    localStorage.removeItem('auth0.is.silent');
+    console.log('[USER] Starting client-side logout cleanup');
+
+    // Clear client-side caches
+    localStorage.clear();
     sessionStorage.clear();
 
-    // Clear Auth0 cookies
-    document.cookie = 'auth0.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    document.cookie = 'app.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    console.log('[USER] Client-side cleanup complete, redirecting to API logout');
 
-    // Redirect to server-side logout
-    window.location.href = '/api/auth/logout';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const returnTo = origin ? `${origin}/login` : '/login';
+    const logoutUrl = `/api/auth/logout?returnTo=${encodeURIComponent(returnTo)}`;
+
+    window.location.href = logoutUrl;
   };
 
   if (isLoading) {
