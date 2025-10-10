@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
   let prefix
   if (folder=='imported') {
-    prefix = `${tenantId}/process/`;
+    prefix = `${tenantId}/raw/`;
   } else {
     prefix = `${tenantId}/${folder}/`;
   }
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     const thumbnailPromises = signedFiles.map(async (file, index) => {
       try {
         const cleanVideoId = file.fileName.replace(/\.mp4$/, '');
-        const thumbnailPath = `${tenantId}/${cleanVideoId}/thumbnail.jpg`;
+        const thumbnailPath = `${file.folder}${cleanVideoId}/thumbnail.jpg`;
         const thumbnailFile = storage.bucket(bucketName!).file(thumbnailPath);
         const [thumbnailExists] = await thumbnailFile.exists();
         if (thumbnailExists) {
