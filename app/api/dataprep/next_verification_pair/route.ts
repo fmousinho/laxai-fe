@@ -59,11 +59,14 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
   return allUrls;
 }
 
-async function fetchNextVerificationImages(client: any, tenantId: string) {
+async function fetchNextVerificationImages(client: any, tenantId: string, videoId?: string): Promise<any | { error: string, message: string }> {
   try {
     // Make request to backend API for next verification images
-    const verificationUrl = `${BACKEND_URL}/api/v1/dataprep/verification-images?tenant_id=${encodeURIComponent(tenantId)}`;
-    console.log('Fetching next verification images for tenant:', tenantId);
+    let verificationUrl = `${BACKEND_URL}/api/v1/dataprep/verification-images?tenant_id=${encodeURIComponent(tenantId)}`;
+    if (videoId) {
+      verificationUrl += `&video_id=${encodeURIComponent(videoId)}`;
+    }
+    console.log('Fetching next verification images for tenant:', tenantId, 'video:', videoId);
 
     const response = await client.request({
       url: verificationUrl,
@@ -76,7 +79,13 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
     const data = response.data as any;
     if (!data || typeof data !== 'object') {
       console.error('Backend returned invalid response format');
-      return null;
+      return { error: 'Invalid response format', message: 'Backend returned invalid response format' };
+    }
+
+    // Check if backend returned an error status
+    if (data.status === 'error') {
+      console.error('Backend returned error status:', data.message);
+      return { error: 'Backend error', message: data.message || 'Unknown backend error' };
     }
 
     // Handle new API format with group prefixes
@@ -116,7 +125,7 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
       // Fallback for old format (if backend still returns imagesA/imagesB)
       if (!data.imagesA || !Array.isArray(data.imagesA) || !data.imagesB || !Array.isArray(data.imagesB)) {
         console.error('Backend returned invalid image data format:', data);
-        return null;
+        return { error: 'Invalid image data format', message: 'Backend returned invalid image data format' };
       }
 
       console.log(`Fetched next pair: ${data.imagesA.length} imagesA and ${data.imagesB.length} imagesB`);
@@ -124,7 +133,7 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
     }
   } catch (error) {
     console.error('Error fetching next verification images:', error);
-    return null;
+    return { error: 'Request failed', message: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -142,14 +151,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
     }
 
+    // Parse request body to get video_id
+    let videoId: string | undefined;
+    try {
+      const body = await req.json();
+      videoId = body.video_id;
+      console.log('Received video_id:', videoId);
+    } catch (error) {
+      console.log('No request body or invalid JSON, proceeding without video_id');
+    }
+
     // Authenticate with Google Cloud
     const auth = new GoogleAuth();
     const client = await auth.getIdTokenClient(BACKEND_URL!);
 
     // Fetch the next verification images (without starting a new session)
-    const nextImages = await fetchNextVerificationImages(client, tenantId);
+    const nextImages = await fetchNextVerificationImages(client, tenantId, videoId);
 
-    if (!nextImages) {
+    if (!nextImages || (nextImages.error && nextImages.message)) {
+      if (nextImages.error) {
+        return NextResponse.json({ 
+          error: nextImages.error, 
+          message: nextImages.message,
+          details: nextImages.error === 'Backend error' ? 'The backend returned an error when fetching verification images. This may be due to corrupted session data from a suspended session.' : undefined
+        }, { status: 500 });
+      }
       return NextResponse.json({ error: 'No more verification images available' }, { status: 404 });
     }
 

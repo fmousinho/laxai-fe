@@ -197,6 +197,9 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          video_id: video.fileName.replace(/\.mp4$/i, '') // Remove .mp4 extension
+        }),
       });
       console.log('Fetch next verification pair response status:', res.status);
       const isOk = await handleFetchError(res, 'fetchNextVerificationPair');
@@ -521,8 +524,61 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
 
       console.log('Track split successfully');
 
-      // Then, fetch the next verification pair (without starting a new session)
-      await fetchNextVerificationPair();
+      // Update the UI to remove the split portion
+      if (imagePair) {
+        setImagePair(prevPair => {
+          if (!prevPair) return prevPair;
+
+          // Determine which track was split
+          let updatedImagesA = [...prevPair.imagesA];
+          let updatedImagesB = [...prevPair.imagesB];
+
+          if (trackId === prevPair.group1_id) {
+            // Split occurred in group A
+            // Find the index of the crop that was clicked
+            const splitIndex = updatedImagesA.findIndex(imageUrl => {
+              const urlWithoutQuery = imageUrl.split('?')[0];
+              const urlParts = urlWithoutQuery.split('/');
+              const imageCropName = urlParts[urlParts.length - 1];
+              return imageCropName === cropImageName;
+            });
+
+            if (splitIndex !== -1) {
+              // Remove the clicked crop and all crops to its right (higher indices)
+              updatedImagesA = updatedImagesA.slice(0, splitIndex);
+              console.log(`Removed ${prevPair.imagesA.length - splitIndex} images from group A after split at ${cropImageName}`);
+            }
+          } else if (trackId === prevPair.group2_id) {
+            // Split occurred in group B
+            // Find the index of the crop that was clicked
+            const splitIndex = updatedImagesB.findIndex(imageUrl => {
+              const urlWithoutQuery = imageUrl.split('?')[0];
+              const urlParts = urlWithoutQuery.split('/');
+              const imageCropName = urlParts[urlParts.length - 1];
+              return imageCropName === cropImageName;
+            });
+
+            if (splitIndex !== -1) {
+              // Remove the clicked crop and all crops to its right (higher indices)
+              updatedImagesB = updatedImagesB.slice(0, splitIndex);
+              console.log(`Removed ${prevPair.imagesB.length - splitIndex} images from group B after split at ${cropImageName}`);
+            }
+          }
+
+          // Update loading states to match the new image arrays
+          setImageLoadingStatesA(prev => prev.slice(0, updatedImagesA.length));
+          setImageLoadingStatesB(prev => prev.slice(0, updatedImagesB.length));
+
+          return {
+            ...prevPair,
+            imagesA: updatedImagesA,
+            imagesB: updatedImagesB
+          };
+        });
+      }
+
+      // Don't fetch next pair immediately - let the user continue classifying with the remaining images
+      setLoading(false);
     } catch (error) {
       console.error('Failed to split track:', error);
       handleApiError(error, 'handleSplitTrack');
