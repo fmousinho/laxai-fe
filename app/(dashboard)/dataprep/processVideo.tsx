@@ -40,6 +40,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   const [nextImagesReady, setNextImagesReady] = useState(false); // Track if next pair images are preloaded
   const [imageLoadingStatesA, setImageLoadingStatesA] = useState<boolean[]>([]);
   const [imageLoadingStatesB, setImageLoadingStatesB] = useState<boolean[]>([]);
+  const [consecutiveEmptySkips, setConsecutiveEmptySkips] = useState(0); // Track consecutive empty array skips to prevent infinite loops
 
   const { error, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
@@ -270,16 +271,42 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       }
 
       if (data.imagesA.length === 0 || data.imagesB.length === 0) {
-        console.log('Classification complete - no more images available for verification', {
+        const newSkipCount = consecutiveEmptySkips + 1;
+        setConsecutiveEmptySkips(newSkipCount);
+
+        console.error('🚨 DATAPREP EMPTY ARRAY ERROR: Received pair with empty image array(s)', {
+          video: video.fileName,
           imagesA_length: data.imagesA.length,
           imagesB_length: data.imagesB.length,
-          total_pairs: data.total_pairs,
-          verified_pairs: data.verified_pairs,
-          status: data.status
+          pair_id: data.pair_id,
+          group1_id: data.group1_id,
+          group2_id: data.group2_id,
+          consecutiveEmptySkips: newSkipCount,
+          timestamp: new Date().toISOString(),
+          action: newSkipCount >= 5 ? 'Too many consecutive empty pairs, completing classification' : 'Automatically skipping this invalid pair and fetching next one'
         });
-        onClassificationComplete();
+
+        // If we've had too many consecutive empty pairs, complete classification to prevent infinite loops
+        if (newSkipCount >= 5) {
+          console.error('🚨 DATAPREP SAFETY: Too many consecutive empty pairs, completing classification to prevent infinite loop');
+          onClassificationComplete();
+          return;
+        }
+
+        // Automatically skip this invalid pair by fetching the next one
+        // This happens invisibly to the user
+        if (isPrefetch) {
+          setPrefetching(false);
+        } else {
+          setLoading(false);
+        }
+
+        // Recursively fetch the next pair (with a small delay to avoid overwhelming the server)
+        setTimeout(() => fetchNextVerificationPair(isPrefetch), 200);
         return;
       } else {
+        // Reset the consecutive empty skips counter when we get a valid pair
+        setConsecutiveEmptySkips(0);
         console.log('Setting image pair with', data.imagesA.length, 'imagesA and', data.imagesB.length, 'imagesB');
         if (isPrefetch) {
           setNextImagePair(data);
@@ -308,6 +335,7 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     setStarted(true);
     setSuspended(false);
     setLoading(true);
+    setConsecutiveEmptySkips(0); // Reset the empty skips counter when starting
     clearError();
 
     try {
