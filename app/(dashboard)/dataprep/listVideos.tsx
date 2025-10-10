@@ -47,7 +47,7 @@ export default function ListVideos({ onPrepareVideo }: ListVideosProps) {
       setLoadingVideos(true);
       try {
         console.log('ListVideos: Fetching videos from GCS...');
-        const { data } = await axios.get('/api/gcs/list_video?folder=imported');
+        const { data } = await axios.get('/api/gcs/list_video?folder=process');
         console.log('GCS list_video response:', data);
         setVideos(data.files || []);
       } catch (err) {

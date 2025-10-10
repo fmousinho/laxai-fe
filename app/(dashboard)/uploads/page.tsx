@@ -88,7 +88,7 @@ export default function Uploads() {
     const checkExistingFiles = async () => {
       try {
         console.log('Checking for existing files...');
-        const { data } = await axios.get('/api/gcs/list_video?folder=raw');
+        const { data } = await axios.get('/api/gcs/list_video?folder=raw', { timeout: 5000 });
         console.log('GCS list_video response:', data);
         if (data.files && data.files.length > 0) {
           console.log('Found existing file, using it:', data.files[0]);
@@ -121,7 +121,7 @@ export default function Uploads() {
     try {
       // Get a read signed URL for the uploaded file
       console.log('Getting read signed URL for file:', fileName);
-      const { data: listData } = await axios.get('/api/gcs/list_video?folder=raw');
+      const { data: listData } = await axios.get('/api/gcs/list_video?folder=raw', { timeout: 5000 });
 
       // Find the uploaded file in the list
       const uploadedFile = listData.files?.find((file: VideoFile) => file.fileName === fileName || file.fullPath?.endsWith(fileName)
@@ -218,7 +218,7 @@ export default function Uploads() {
 
       // Check if there are other files
       console.log('Checking for remaining files...');
-      const { data } = await axios.get('/api/gcs/list_video?folder=raw');
+      const { data } = await axios.get('/api/gcs/list_video?folder=raw', { timeout: 5000 });
       console.log('List API response:', data);
       // Filter out the deleted file in case the API returns stale data
       const remainingFiles = (data.files || []).filter((file: VideoFile) => (file.fullPath || file.fileName) !== filePath
