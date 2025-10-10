@@ -557,10 +557,11 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       console.error('Failed to suspend:', error);
       handleApiError(error, 'handleSuspend');
     }
-    setLoading(false);
   };
 
   if (error) {
+    return <ErrorPage error={error} onRetry={() => window.location.reload()} />;
+  }
 
   const handleSplitTrack = async (trackId: number, cropImageName: string) => {
     setLoading(true);
@@ -648,59 +649,6 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       setLoading(false);
     }
   };
-
-  const handleSuspend = async () => {
-    setLoading(true);
-    clearError();
-
-    try {
-      const res = await fetch("/api/dataprep/suspend", {
-        method: "POST",
-      });
-      const isOk = await handleFetchError(res, 'handleSuspend');
-      if (!isOk) {
-        setLoading(false);
-        return;
-      }
-      setStarted(false);
-      setSuspended(true);
-      setImagePair(null);
-      setNextImagePair(null);
-      setNextImagesReady(false);
-      // Navigate back to the list view after suspending
-      onBackToList();
-    } catch (error) {
-      console.error('Failed to suspend:', error);
-      handleApiError(error, 'handleSuspend');
-    }
-    setLoading(false);
-  };
-
-  if (error) {
-    return (
-      <ErrorPage
-        error={error}
-        onRetry={clearError}
-        onDismiss={onBackToList}
-        customActions={
-          <>
-            <Button
-              onClick={clearError}
-              variant="outline"
-            >
-              Try Again
-            </Button>
-            <Button
-              onClick={onBackToList}
-              variant="default"
-            >
-              Back to Videos
-            </Button>
-          </>
-        }
-      />
-    );
-  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] w-full px-0 sm:px-4 max-w-screen-lg mx-auto">
