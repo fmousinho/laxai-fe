@@ -368,6 +368,35 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       }
       const responseData = await res.json();
       
+      // Check for error conditions that should trigger automatic suspension
+      if (responseData.status === 'error' || responseData.status === 'capacity_exceeded' || 
+          (responseData.error) || 
+          (!responseData.status && !responseData.next_images && !responseData.complete)) {
+        console.log('Received error or unrecognized response from server, automatically suspending classification:', responseData);
+        
+        // Automatically suspend classification
+        try {
+          await fetch("/api/dataprep/suspend", {
+            method: "POST",
+          });
+          console.log('Classification automatically suspended due to server error');
+        } catch (suspendError) {
+          console.error('Failed to auto-suspend after server error:', suspendError);
+        }
+        
+        // Show error to user and navigate back
+        handleApiError({ 
+          message: responseData.message || responseData.error || 'Server returned an error during classification. Classification has been suspended.' 
+        }, 'handleClassify');
+        setStarted(false);
+        setSuspended(true);
+        setImagePair(null);
+        setNextImagePair(null);
+        setNextImagesReady(false);
+        onBackToList();
+        return;
+      }
+      
       // Check if classification is complete
       if (responseData.status === 'complete') {
         console.log('Classification complete - all tracks have been assigned to players');
@@ -435,6 +464,35 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       }
       const responseData = await res.json();
       
+      // Check for error conditions that should trigger automatic suspension
+      if (responseData.status === 'error' || responseData.status === 'capacity_exceeded' || 
+          (responseData.error) || 
+          (!responseData.status && !responseData.next_images && !responseData.complete)) {
+        console.log('Received error or unrecognized response from server, automatically suspending classification:', responseData);
+        
+        // Automatically suspend classification
+        try {
+          await fetch("/api/dataprep/suspend", {
+            method: "POST",
+          });
+          console.log('Classification automatically suspended due to server error');
+        } catch (suspendError) {
+          console.error('Failed to auto-suspend after server error:', suspendError);
+        }
+        
+        // Show error to user and navigate back
+        handleApiError({ 
+          message: responseData.message || responseData.error || 'Server returned an error during classification. Classification has been suspended.' 
+        }, 'handleSkip');
+        setStarted(false);
+        setSuspended(true);
+        setImagePair(null);
+        setNextImagePair(null);
+        setNextImagesReady(false);
+        onBackToList();
+        return;
+      }
+      
       // Check if classification is complete
       if (responseData.status === 'complete') {
         console.log('Classification complete - all tracks have been assigned to players');
@@ -473,9 +531,12 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       handleApiError(error, 'handleSkip');
       setLoading(false);
     }
-  };  const handleSuspend = async () => {
+  };
+
+  const handleSuspend = async () => {
     setLoading(true);
-    clearError(); // Clear any previous errors
+    clearError();
+
     try {
       const res = await fetch("/api/dataprep/suspend", {
         method: "POST",
@@ -498,6 +559,8 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
     }
     setLoading(false);
   };
+
+  if (error) {
 
   const handleSplitTrack = async (trackId: number, cropImageName: string) => {
     setLoading(true);
@@ -584,6 +647,33 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       handleApiError(error, 'handleSplitTrack');
       setLoading(false);
     }
+  };
+
+  const handleSuspend = async () => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const res = await fetch("/api/dataprep/suspend", {
+        method: "POST",
+      });
+      const isOk = await handleFetchError(res, 'handleSuspend');
+      if (!isOk) {
+        setLoading(false);
+        return;
+      }
+      setStarted(false);
+      setSuspended(true);
+      setImagePair(null);
+      setNextImagePair(null);
+      setNextImagesReady(false);
+      // Navigate back to the list view after suspending
+      onBackToList();
+    } catch (error) {
+      console.error('Failed to suspend:', error);
+      handleApiError(error, 'handleSuspend');
+    }
+    setLoading(false);
   };
 
   if (error) {
