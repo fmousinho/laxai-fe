@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ErrorPage } from '@/components/ErrorPage';
 import { useErrorHandler } from '@/lib/useErrorHandler';
 import { SplitIcon } from '@/components/icons';
@@ -41,6 +42,8 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
   const [imageLoadingStatesA, setImageLoadingStatesA] = useState<boolean[]>([]);
   const [imageLoadingStatesB, setImageLoadingStatesB] = useState<boolean[]>([]);
   const [consecutiveEmptySkips, setConsecutiveEmptySkips] = useState(0); // Track consecutive empty array skips to prevent infinite loops
+  const [totalPairs, setTotalPairs] = useState<number | null>(null);
+  const [verifiedPairs, setVerifiedPairs] = useState<number>(0);
 
   const { error, handleFetchError, handleApiError, clearError } = useErrorHandler();
 
@@ -307,6 +310,15 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
       } else {
         // Reset the consecutive empty skips counter when we get a valid pair
         setConsecutiveEmptySkips(0);
+
+        // Update progress counters from API response
+        if (data.total_pairs !== undefined) {
+          setTotalPairs(data.total_pairs);
+        }
+        if (data.verified_pairs !== undefined) {
+          setVerifiedPairs(data.verified_pairs);
+        }
+
         console.log('Setting image pair with', data.imagesA.length, 'imagesA and', data.imagesB.length, 'imagesB');
         if (isPrefetch) {
           setNextImagePair(data);
@@ -395,6 +407,9 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       const responseData = await res.json();
+      
+      // Increment verified pairs count on successful classification
+      setVerifiedPairs(prev => prev + 1);
       
       // Check for error conditions that should trigger automatic suspension
       if (responseData.status === 'error' || responseData.status === 'capacity_exceeded' || 
@@ -491,6 +506,9 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
         return;
       }
       const responseData = await res.json();
+      
+      // Increment verified pairs count on successful skip
+      setVerifiedPairs(prev => prev + 1);
       
       // Check for error conditions that should trigger automatic suspension
       if (responseData.status === 'error' || responseData.status === 'capacity_exceeded' || 
@@ -691,6 +709,19 @@ export default function ProcessVideo({ video, onBackToList, onClassificationComp
           Preparing: {video.fileName}
         </div>
       </div>
+
+      {started && totalPairs && (
+        <div className="w-full flex justify-center items-center mb-4">
+          <div className="flex items-center gap-4 text-sm">
+            <Badge variant="secondary" className="px-3 py-1">
+              {verifiedPairs.toLocaleString()} / {totalPairs.toLocaleString()} pairs verified
+            </Badge>
+            <div className="text-muted-foreground">
+              {totalPairs > 0 ? Math.round((verifiedPairs / totalPairs) * 100) : 0}% complete
+            </div>
+          </div>
+        </div>
+      )}
 
       {!started && (
         <div className="flex items-center justify-center py-12">

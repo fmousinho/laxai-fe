@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
-import { GoogleAuth } from 'google-auth-library';
+import { GoogleAuth, JWT } from 'google-auth-library';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -22,9 +23,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized or missing tenant_id' }, { status: 401 });
     }
 
-    // Authenticate with Google Cloud
-    const auth = new GoogleAuth();
-    const client = await auth.getIdTokenClient(BACKEND_URL!);
+    // Authenticate with Google Cloud using JWT constructor instead of deprecated fromJSON
+    let client;
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      try {
+        const keyFile = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        client = new JWT({
+          email: keyFile.client_email,
+          key: keyFile.private_key,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        });
+      } catch (error) {
+        console.error('Failed to create JWT client from service account key:', error);
+        return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
+      }
+    } else {
+      // Fallback to GoogleAuth for other credential types
+      const auth = new GoogleAuth();
+      client = await auth.getIdTokenClient(BACKEND_URL!);
+    }
 
     // Make request to backend API
     const response = await client.request({
