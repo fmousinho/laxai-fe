@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
-import { GoogleAuth } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
 import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
@@ -33,24 +33,25 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const limit = searchParams.get('limit') || '50';
 
-    // Authenticate with Google Cloud using explicit credentials to avoid deprecated methods
+    // Authenticate with Google Cloud using JWT constructor to avoid deprecated methods
     let client;
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       try {
-        // Load credentials from file and use credentials option instead of keyFile
-        const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
-        const auth = new GoogleAuth({
-          credentials,
+        // Load credentials and create JWT client directly
+        const keys = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        client = new JWT({
+          email: keys.client_email,
+          key: keys.private_key,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
-        client = await auth.getIdTokenClient(BACKEND_URL!);
       } catch (error) {
-        console.error('Failed to create authenticated client from service account key:', error);
+        console.error('Failed to create JWT client from service account key:', error);
         return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
       }
     } else {
-      // Fallback to GoogleAuth for other credential types
-      const auth = new GoogleAuth();
-      client = await auth.getIdTokenClient(BACKEND_URL!);
+      // Fallback - this might not work without credentials
+      console.error('GOOGLE_APPLICATION_CREDENTIALS not set');
+      return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
     }
     console.log('Google Auth client created');
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleAuth } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -7,11 +8,22 @@ export async function GET() {
   try {
     console.log('Testing backend authentication...');
     
-    const auth = new GoogleAuth();
-    const client = await auth.getIdTokenClient(BACKEND_URL!);
+    // Load service account credentials
+    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!credentialsPath) {
+      throw new Error('GOOGLE_APPLICATION_CREDENTIALS environment variable is not set');
+    }
+    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
     
-    // Get the actual token that will be sent
-    const token = await client.idTokenProvider.fetchIdToken(BACKEND_URL!);
+    // Create JWT client for authentication
+    const client = new JWT({
+      email: credentials.client_email,
+      key: credentials.private_key,
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    
+    // Get the ID token for the backend URL
+    const token = await client.fetchIdToken(BACKEND_URL!);
     console.log('Token created, length:', token?.length);
     
     // Try to decode the token to see what's in it

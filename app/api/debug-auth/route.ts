@@ -1,27 +1,34 @@
 import { NextResponse } from 'next/server';
+import { JWT } from 'google-auth-library';
+import * as fs from 'fs';
 
 export async function GET() {
-  // Check both process.env and actual GoogleAuth initialization
+  // Check both process.env and actual JWT initialization
   const hasCredentialsEnv = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
   const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   
-  let googleAuthStatus = 'unknown';
+  let jwtStatus = 'unknown';
   try {
-    const { GoogleAuth } = require('google-auth-library');
-    const auth = new GoogleAuth();
-    await auth.getApplicationDefault();
-    googleAuthStatus = 'success';
+    // Load credentials and create JWT client directly
+    const keys = JSON.parse(fs.readFileSync(credentialsPath!, 'utf8'));
+    const auth = new JWT({
+      email: keys.client_email,
+      key: keys.private_key,
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    await auth.authorize();
+    jwtStatus = 'success';
   } catch (error) {
-    googleAuthStatus = `error: ${error instanceof Error ? error.message : String(error)}`;
+    jwtStatus = `error: ${error instanceof Error ? error.message : String(error)}`;
   }
 
   return NextResponse.json({
     BACKEND_API_URL: process.env.BACKEND_API_URL,
     hasCredentialsEnv,
     credentialsPath,
-    googleAuthStatus,
+    jwtStatus,
     nodeEnv: process.env.NODE_ENV,
     // Check if files exist
-    credentialsFileExists: credentialsPath ? require('fs').existsSync(credentialsPath) : false
+    credentialsFileExists: credentialsPath ? fs.existsSync(credentialsPath) : false
   });
 }

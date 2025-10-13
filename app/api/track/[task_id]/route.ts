@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
-import { GoogleAuth } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -27,9 +28,26 @@ export async function GET(
 
     const { task_id } = await params;
 
-    // Authenticate with Google Cloud
-    const auth = new GoogleAuth();
-    const client = await auth.getIdTokenClient(BACKEND_URL!);
+    // Authenticate with Google Cloud using JWT constructor to avoid deprecated methods
+    let client;
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      try {
+        // Load credentials and create JWT client directly
+        const keys = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        client = new JWT({
+          email: keys.client_email,
+          key: keys.private_key,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        });
+      } catch (error) {
+        console.error('Failed to create JWT client from service account key:', error);
+        return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
+      }
+    } else {
+      // Fallback - this might not work without credentials
+      console.error('GOOGLE_APPLICATION_CREDENTIALS not set');
+      return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
+    }
 
     // Make request to backend API
     const response = await client.request({
@@ -57,9 +75,26 @@ export async function DELETE(
 
     const { task_id } = await params;
 
-    // Authenticate with Google Cloud
-    const auth = new GoogleAuth();
-    const client = await auth.getIdTokenClient(BACKEND_URL!);
+    // Authenticate with Google Cloud using JWT constructor to avoid deprecated methods
+    let client;
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      try {
+        // Load credentials and create JWT client directly
+        const keys = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        client = new JWT({
+          email: keys.client_email,
+          key: keys.private_key,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        });
+      } catch (error) {
+        console.error('Failed to create JWT client from service account key:', error);
+        return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
+      }
+    } else {
+      // Fallback - this might not work without credentials
+      console.error('GOOGLE_APPLICATION_CREDENTIALS not set');
+      return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
+    }
 
     // Make request to backend API
     const response = await client.request({
