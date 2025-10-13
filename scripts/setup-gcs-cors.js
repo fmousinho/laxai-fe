@@ -1,5 +1,27 @@
 const { Storage } = require('@google-cloud/storage');
 const fs = require('fs');
+const path = require('path');
+
+// Load environment variables from .env.local manually
+function loadEnv() {
+  const envPath = path.join(__dirname, '..', '.env.local');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const lines = envContent.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join('=').replace(/^["']|["']$/g, ''); // Remove quotes
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+}
+
+loadEnv();
 
 async function setGCSCors() {
   try {
@@ -10,6 +32,7 @@ async function setGCSCors() {
 
     if (!bucketName) {
       console.error('GCS_BUCKET_NAME environment variable not set');
+      console.error('Make sure .env.local file exists and contains GCS_BUCKET_NAME');
       process.exit(1);
     }
 

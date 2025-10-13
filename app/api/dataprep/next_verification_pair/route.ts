@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { GoogleAuth } from 'google-auth-library';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -48,7 +49,7 @@ async function getImageUrlsFromPrefixes(storage: any, prefixes: string[]): Promi
       );
 
       allUrls.push(...signedUrls);
-      console.log(`Found ${signedUrls.length} images in ${prefix}`);
+      console.log(`📸 Found ${signedUrls.length} images in prefix ${prefix}`);
 
     } catch (error) {
       console.error(`Error listing files for prefix ${prefix}:`, error);
@@ -90,7 +91,11 @@ async function fetchNextVerificationImages(client: any, tenantId: string, videoI
 
     // Handle new API format with group prefixes
     if (data.group1_prefixes && data.group2_prefixes) {
-      console.log('Received new API format with prefixes, converting to image URLs...');
+      console.log('🔍 DEBUG: Received prefixes from backend after potential split:');
+      console.log('  group1_prefixes:', JSON.stringify(data.group1_prefixes, null, 2));
+      console.log('  group2_prefixes:', JSON.stringify(data.group2_prefixes, null, 2));
+      console.log('  group1_id:', data.group1_id, 'group2_id:', data.group2_id);
+      console.log('  total_pairs:', data.total_pairs, 'verified_pairs:', data.verified_pairs);
 
       // Import GCS utilities
       const { Storage } = require('@google-cloud/storage');
@@ -165,9 +170,10 @@ export async function POST(req: NextRequest) {
     let client;
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       try {
-        // Create GoogleAuth with explicit credentials instead of relying on environment variable
+        // Load credentials from file and use credentials option instead of keyFile
+        const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
         const auth = new GoogleAuth({
-          keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+          credentials,
         });
         client = await auth.getIdTokenClient(BACKEND_URL!);
       } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleAuth } from 'google-auth-library';
 import { getTenantId } from '@/lib/gcs-tenant';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -78,9 +79,10 @@ export async function POST(req: NextRequest) {
         let client;
         if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
           try {
-            // Create GoogleAuth with explicit credentials instead of relying on environment variable
+            // Load credentials from file and use credentials option instead of keyFile
+            const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
             const auth = new GoogleAuth({
-              keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+              credentials,
             });
             client = await auth.getIdTokenClient(BACKEND_URL!);
           } catch (error) {
@@ -190,9 +192,10 @@ export async function GET(req: NextRequest) {
     let client;
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       try {
-        // Create GoogleAuth with explicit credentials instead of relying on environment variable
+        // Load credentials from file and use credentials option instead of keyFile
+        const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
         const auth = new GoogleAuth({
-          keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+          credentials,
         });
         client = await auth.getIdTokenClient(BACKEND_URL!);
       } catch (error) {

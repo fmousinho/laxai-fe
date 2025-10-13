@@ -25,6 +25,50 @@ export type VideoFile = {
   thumbnailUrl?: string;
 };
 
+interface ThumbnailDisplayProps {
+  video: VideoFile;
+}
+
+const ThumbnailDisplay: React.FC<ThumbnailDisplayProps> = ({ video }) => {
+  const [showFallback, setShowFallback] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  useEffect(() => {
+    // Reset state when video changes
+    setShowFallback(false);
+    setImageLoaded(false);
+  }, [video.thumbnailUrl, video.signedUrl]);
+
+  if (!video.thumbnailUrl || showFallback) {
+    return (
+      <video
+        src={video.signedUrl}
+        className="w-16 h-12 object-cover rounded"
+        muted
+        preload="metadata"
+          crossOrigin="anonymous"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={video.thumbnailUrl}
+      alt={`${video.fileName} thumbnail`}
+      className="w-16 h-12 object-cover rounded"
+      loading="lazy"
+      crossOrigin="anonymous"
+      referrerPolicy="no-referrer"
+      onLoad={() => setImageLoaded(true)}
+      onError={() => {
+        console.log(`Thumbnail failed to load for ${video.fileName}, falling back to video`);
+        setShowFallback(true);
+      }}
+      style={{ display: imageLoaded ? 'block' : 'none' }}
+    />
+  );
+};
+
 interface ListVideosProps {
   onPrepareVideo: (video: VideoFile) => void;
 }
@@ -88,21 +132,7 @@ export default function ListVideos({ onPrepareVideo }: ListVideosProps) {
               {videos.map((video, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    {video.thumbnailUrl ? (
-                      <img
-                        src={video.thumbnailUrl}
-                        alt={`${video.fileName} thumbnail`}
-                        className="w-16 h-12 object-cover rounded"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <video
-                        src={video.signedUrl}
-                        className="w-16 h-12 object-cover rounded"
-                        muted
-                        preload="metadata"
-                      />
-                    )}
+                    <ThumbnailDisplay video={video} />
                   </TableCell>
                   <TableCell className="font-medium">
                     {video.fileName}

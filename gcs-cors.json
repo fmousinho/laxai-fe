@@ -2,7 +2,7 @@
   {
     "maxAgeSeconds": 3600,
     "method": ["PUT", "POST", "GET", "HEAD", "OPTIONS"],
-    "origin": ["http://localhost:3000", "http://localhost:3001"],
+    "origin": ["http://localhost:3000", "http://localhost:3001", "https://storage.googleapis.com"],
     "responseHeader": [
       "Content-Type",
       "x-goog-resumable",
@@ -11,7 +11,8 @@
       "Access-Control-Allow-Origin",
       "Access-Control-Allow-Methods",
       "Access-Control-Allow-Headers",
-      "Access-Control-Allow-Credentials"
+      "Access-Control-Allow-Credentials",
+      "Access-Control-Max-Age"
     ]
   }
 ]

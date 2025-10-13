@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { GoogleAuth } from 'google-auth-library';
+import * as fs from 'fs';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -50,9 +51,10 @@ export async function POST(req: NextRequest) {
     let client;
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       try {
-        // Create GoogleAuth with explicit credentials instead of relying on environment variable
+        // Load credentials from file and use credentials option instead of keyFile
+        const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
         const auth = new GoogleAuth({
-          keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+          credentials,
         });
         client = await auth.getIdTokenClient(BACKEND_URL!);
       } catch (error) {
@@ -66,6 +68,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Make request to backend API
+    console.log('🔪 SPLIT TRACK: Calling backend split-track API with:', {
+      track_id: track_id,
+      crop_image_name: crop_image_name,
+      tenant_id: tenantId
+    });
     const response = await client.request({
       url: `${BACKEND_URL}/api/v1/dataprep/split-track`,
       method: 'POST',
@@ -76,9 +83,21 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    console.log('Track split successfully:', response.data);
+    console.log('🔪 SPLIT TRACK: Backend response:', response.status, JSON.stringify(response.data, null, 2));
 
-    return NextResponse.json(response.data);
+    const data = response.data as any;
+    if (!data.success) {
+      console.error('🔪 SPLIT TRACK FAILED: Backend returned success=false. Full response:', data);
+      return NextResponse.json({
+        error: 'Backend split failed',
+        message: data.message || 'Unknown backend error',
+        backendResponse: data
+      }, { status: 500 });
+    }
+
+    console.log('Track split successfully:', data);
+
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error splitting track:', error);
     return NextResponse.json({ error: 'Failed to split track' }, { status: 500 });
