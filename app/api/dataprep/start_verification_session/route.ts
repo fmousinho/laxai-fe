@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
         client = new JWT({
           email: keys.client_email,
           key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
       } catch (error) {
         console.error('Failed to create JWT client from service account key:', error);
@@ -61,18 +60,25 @@ export async function POST(req: NextRequest) {
       const requestBody = { video_id: video_id };
       console.log('Start URL:', startUrl);
       console.log('Start request body:', requestBody);
-      const startResponse = await client.request({
-        url: startUrl,
+
+      // Get ID token for backend authentication
+      const idToken = await client.fetchIdToken(BACKEND_URL!);
+      console.log('ID Token obtained, length:', idToken?.length);
+
+      const startResponse = await fetch(startUrl, {
         method: 'POST',
-        data: requestBody,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(requestBody)
       });
-      console.log('Start session response:', startResponse.status, startResponse.data);
+
+      const responseData = await startResponse.json();
+      console.log('Start session response:', startResponse.status, responseData);
 
       // Check if session start was successful
-      const sessionData = startResponse.data as any;
+      const sessionData = responseData as any;
       if (!sessionData.success) {
         console.error('Backend failed to start session:', sessionData.message);
         return NextResponse.json({
@@ -88,10 +94,22 @@ export async function POST(req: NextRequest) {
       });
     } catch (startError: any) {
       console.error('Error starting session:', startError);
-      console.error('Start error details:', startError.response?.data || startError.message);
+      console.error('Start error details:', startError.message);
+
+      // Try to get error details from response if available
+      let errorDetails = startError.message;
+      if (startError.response) {
+        try {
+          const errorData = await startError.response.text();
+          errorDetails = errorData || startError.message;
+        } catch (e) {
+          // Ignore error parsing
+        }
+      }
+
       return NextResponse.json({
         error: 'Failed to start session',
-        details: startError.response?.data || startError.message
+        details: errorDetails
       }, { status: 500 });
     }
   } catch (error) {

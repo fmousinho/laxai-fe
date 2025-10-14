@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
         client = new JWT({
           email: keys.client_email,
           key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
       } catch (error) {
         console.error('Failed to create JWT client from service account key:', error);
@@ -68,25 +67,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
     }
 
-    // Make request to backend API
+    // Make request to backend API using ID token authentication
     console.log('🔪 SPLIT TRACK: Calling backend split-track API with:', {
       track_id: track_id,
       crop_image_name: crop_image_name,
       tenant_id: tenantId
     });
-    const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/dataprep/split-track`,
+
+    const idToken = await client.fetchIdToken(BACKEND_URL!);
+    console.log('ID Token obtained for split-track, length:', idToken?.length);
+
+    const splitUrl = `${BACKEND_URL}/api/v1/dataprep/split-track?tenant_id=${encodeURIComponent(tenantId)}`;
+    const response = await fetch(splitUrl, {
       method: 'POST',
-      params: { tenant_id: tenantId },
-      data: {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
         track_id: track_id,
         crop_image_name: crop_image_name
-      }
+      })
     });
 
-    console.log('🔪 SPLIT TRACK: Backend response:', response.status, JSON.stringify(response.data, null, 2));
-
-    const data = response.data as any;
+    const data = await response.json();
+    console.log('🔪 SPLIT TRACK: Backend response:', response.status, JSON.stringify(data, null, 2));
     if (!data.success) {
       console.error('🔪 SPLIT TRACK FAILED: Backend returned success=false. Full response:', data);
       return NextResponse.json({

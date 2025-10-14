@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
         client = new JWT({
           email: keys.client_email,
           key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
       } catch (error) {
         console.error('Failed to create JWT client from service account key:', error);
@@ -44,14 +43,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
     }
 
-    // Make request to backend API
-    const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/dataprep/suspend`,
+    // Make request to backend API using ID token authentication
+    const idToken = await client.fetchIdToken(BACKEND_URL!);
+    console.log('ID Token obtained for suspend, length:', idToken?.length);
+
+    const suspendUrl = `${BACKEND_URL}/api/v1/dataprep/suspend?tenant_id=${encodeURIComponent(tenantId)}`;
+    const response = await fetch(suspendUrl, {
       method: 'POST',
-      params: { tenant_id: tenantId }
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      }
     });
 
-    return NextResponse.json(response.data);
+    const responseData = await response.json();
+    console.log('Suspend response:', response.status, responseData);
+
+    if (!response.ok) {
+      console.error('Backend suspend request failed with status:', response.status);
+      return NextResponse.json({ error: 'Failed to suspend preparation', details: responseData }, { status: response.status });
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Error suspending prep:', error);
     return NextResponse.json({ error: 'Failed to suspend preparation' }, { status: 500 });

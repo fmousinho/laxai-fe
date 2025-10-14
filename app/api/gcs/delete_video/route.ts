@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Storage } from '@google-cloud/storage';
+import { getStorageClient } from '@/lib/gcs-client';
 import { getTenantId } from '@/lib/gcs-tenant';
 
-const storage = new Storage();
+const storage = getStorageClient();
 const bucketName = process.env.GCS_BUCKET_NAME;
 
 export async function DELETE(req: NextRequest) {

@@ -65,16 +65,29 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
     // Make request to backend API for next verification images
     const verificationUrl = `${BACKEND_URL}/api/v1/dataprep/verification-images?tenant_id=${encodeURIComponent(tenantId)}`;
     console.log('Fetching next verification images for tenant:', tenantId);
-    
-    const response = await client.request({
-      url: verificationUrl,
-      method: 'GET'
+
+    // Get ID token for backend authentication
+    const idToken = await client.fetchIdToken(BACKEND_URL!);
+    console.log('ID Token obtained for verification images, length:', idToken?.length);
+
+    const response = await fetch(verificationUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${idToken}`
+      }
     });
 
-    console.log('Verification images response:', response.status, JSON.stringify(response.data, null, 2));
-    
+    const responseData = await response.json();
+    console.log('Verification images response:', response.status, JSON.stringify(responseData, null, 2));
+
+    // Check if the request was successful
+    if (!response.ok) {
+      console.error('Backend request failed with status:', response.status);
+      return null;
+    }
+
     // Validate the response format
-    const data = response.data as any;
+    const data = responseData as any;
     if (!data || typeof data !== 'object') {
       console.error('Backend returned invalid response format');
       return null;
@@ -86,7 +99,18 @@ async function fetchNextVerificationImages(client: any, tenantId: string) {
       
       // Import GCS utilities
       const { Storage } = require('@google-cloud/storage');
-      const storage = new Storage();
+      let storage: any;
+      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        try {
+          const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+          storage = new Storage({ credentials });
+        } catch (error) {
+          console.error('Failed to load credentials:', error);
+          storage = new Storage(); // Fallback
+        }
+      } else {
+        storage = new Storage(); // Fallback to default auth
+      }
       
       // Convert prefixes to image URLs
       const imagesA = await getImageUrlsFromPrefixes(storage, data.group1_prefixes);
@@ -153,7 +177,6 @@ export async function POST(req: NextRequest) {
         client = new JWT({
           email: keys.client_email,
           key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
       } catch (error) {
         console.error('Failed to create JWT client from service account key:', error);
@@ -165,15 +188,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
     }
 
-    // Make request to backend API
-    const response = await client.request({
-      url: `${BACKEND_URL}/api/v1/dataprep/record-response`,
+    // Make request to backend API using ID token authentication
+    const idToken = await client.fetchIdToken(BACKEND_URL!);
+    console.log('ID Token obtained for recording response, length:', idToken?.length);
+
+    const recordUrl = `${BACKEND_URL}/api/v1/dataprep/record-response?tenant_id=${encodeURIComponent(tenantId)}`;
+    const recordResponse = await fetch(recordUrl, {
       method: 'POST',
-      params: { tenant_id: tenantId },
-      data: { pair_id, decision: label }
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ pair_id, decision: label })
     });
 
-    console.log('Classification recorded successfully:', response.data);
+    const recordData = await recordResponse.json();
+    console.log('Classification recorded successfully:', recordData);
 
     // After successful recording, fetch the next verification pair
     // We'll call our own next_verification_pair endpoint to get the next images
@@ -202,7 +232,7 @@ export async function POST(req: NextRequest) {
     // Return both the recording result and the next images
     const result = {
       success: true,
-      recorded_response: response.data,
+      recorded_response: recordData,
       next_images: nextImages
     };
 

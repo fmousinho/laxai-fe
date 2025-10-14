@@ -1,24 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Storage } from '@google-cloud/storage';
+import { getStorageClient } from '@/lib/gcs-client';
 import { getTenantId } from '@/lib/gcs-tenant';
-import * as fs from 'fs';
 
-// Initialize storage with explicit credentials
-const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-console.log('Credentials path:', credentialsPath);
-
-let storage: Storage;
-if (credentialsPath) {
-  try {
-    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-    storage = new Storage({ credentials });
-  } catch (error) {
-    console.error('Failed to load credentials:', error);
-    storage = new Storage(); // Fallback
-  }
-} else {
-  storage = new Storage(); // Fallback to default auth
-}
+const storage = getStorageClient();
 
 const bucketName = process.env.GCS_BUCKET_NAME as string;
 

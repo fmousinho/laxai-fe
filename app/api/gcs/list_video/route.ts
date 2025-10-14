@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Storage } from '@google-cloud/storage';
+import { getStorageClient } from '@/lib/gcs-client';
 import { getTenantId } from '@/lib/gcs-tenant';
 
 const bucketName = process.env.GCS_BUCKET_NAME;
-
-const storage = new Storage();
+const storage = getStorageClient();
 
 export async function GET(req: NextRequest) {
   console.log('=== LIST VIDEO API START ===');

@@ -69,15 +69,28 @@ async function fetchNextVerificationImages(client: any, tenantId: string, videoI
     }
     console.log('Fetching next verification images for tenant:', tenantId, 'video:', videoId);
 
-    const response = await client.request({
-      url: verificationUrl,
-      method: 'GET'
+    // Get ID token for backend authentication
+    const idToken = await client.fetchIdToken(BACKEND_URL!);
+    console.log('ID Token obtained for verification images, length:', idToken?.length);
+
+    const response = await fetch(verificationUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${idToken}`
+      }
     });
 
-    console.log('Verification images response:', response.status, JSON.stringify(response.data, null, 2));
+    const responseData = await response.json();
+    console.log('Verification images response:', response.status, JSON.stringify(responseData, null, 2));
+
+    // Check if the request was successful
+    if (!response.ok) {
+      console.error('Backend request failed with status:', response.status);
+      return { error: 'Request failed', message: `Backend returned status ${response.status}` };
+    }
 
     // Validate the response format
-    const data = response.data as any;
+    const data = responseData as any;
     if (!data || typeof data !== 'object') {
       console.error('Backend returned invalid response format');
       return { error: 'Invalid response format', message: 'Backend returned invalid response format' };
@@ -99,7 +112,18 @@ async function fetchNextVerificationImages(client: any, tenantId: string, videoI
 
       // Import GCS utilities
       const { Storage } = require('@google-cloud/storage');
-      const storage = new Storage();
+      let storage: any;
+      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        try {
+          const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+          storage = new Storage({ credentials });
+        } catch (error) {
+          console.error('Failed to load credentials:', error);
+          storage = new Storage(); // Fallback
+        }
+      } else {
+        storage = new Storage(); // Fallback to default auth
+      }
 
       // Convert prefixes to image URLs
       const imagesA = await getImageUrlsFromPrefixes(storage, data.group1_prefixes);
@@ -175,7 +199,6 @@ export async function POST(req: NextRequest) {
         client = new JWT({
           email: keys.client_email,
           key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         });
       } catch (error) {
         console.error('Failed to create JWT client from service account key:', error);
