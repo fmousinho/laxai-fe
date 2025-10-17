@@ -46,7 +46,18 @@ CREATE TABLE products (
 
 Then, uncomment `app/api/seed.ts` and hit `http://localhost:3000/api/seed` to seed the database with products.
 
-Next, copy the `.env.example` file to `.env` and update the values. Follow the instructions in the `.env.example` file to set up your GitHub OAuth application.
+Next, copy the `.env.example` file to `.env` and update the values. Follow the instructions in the `.env.example` file to set up your Auth0 application and backend services.
+
+**Required Environment Variables:**
+- `AUTH0_DOMAIN` - Your Auth0 domain
+- `AUTH0_CLIENT_ID` - Your Auth0 application client ID
+- `AUTH0_CLIENT_SECRET` - Your Auth0 application client secret
+- `AUTH0_SECRET` - Random string for session encryption
+- `APP_BASE_URL` - Your application base URL (e.g., `http://localhost:3000`)
+- `BACKEND_API_URL` - Backend API URL for dataprep services
+- `STITCH_API_URL` - Backend API URL for video stitching service
+- `GCS_BUCKET_NAME` - Google Cloud Storage bucket name
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to GCS service account JSON
 
 ```bash
 npm i -g vercel
