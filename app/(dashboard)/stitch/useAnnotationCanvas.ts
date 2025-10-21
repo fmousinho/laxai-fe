@@ -217,7 +217,7 @@ export function useAnnotationCanvas({
       try {
         // Fetch image blob
         const imageResponse = await fetch(
-          `/api/stitch/video/frames/${sessionId}/${frameId}/image?format=png`
+          `/api/stitch/video/frames/${sessionId}/${frameId}/image?format=jpg`
         );
         
         if (!imageResponse.ok) {

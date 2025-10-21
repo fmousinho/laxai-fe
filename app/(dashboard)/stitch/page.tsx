@@ -19,11 +19,12 @@ export default function StitchPage() {
 
     try {
       // Load video session
+      const videoPath = video.fullPath || (video.folder ? `${video.folder}${video.fileName}` : video.fileName);
       const response = await fetch('/api/stitch/video/load', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          video_path: video.fileName,
+          video_path: videoPath,
         }),
       });
 

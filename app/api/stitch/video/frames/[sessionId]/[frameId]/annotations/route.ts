@@ -5,7 +5,7 @@ import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ sessionId: string }> }
+  { params }: { params: Promise<{ sessionId: string; frameId: string }> }
 ) {
   try {
     if (!STITCHER_API_BASE_URL) {
@@ -17,13 +17,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { sessionId } = await params;
+    const { sessionId, frameId } = await params;
 
     // Get ID token for backend authentication
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
-    // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.nextFrame(sessionId));
+    // Proxy request to Python backend (annotations endpoint)
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.frameAnnotations(sessionId, frameId));
     const response = await fetch(backendUrl, {
       headers: {
         'Authorization': `Bearer ${idToken}`
@@ -32,7 +32,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to navigate to next frame' },
+        { error: 'Failed to fetch frame annotations' },
         { status: response.status }
       );
     }
@@ -40,10 +40,6 @@ export async function GET(
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error navigating to next frame:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

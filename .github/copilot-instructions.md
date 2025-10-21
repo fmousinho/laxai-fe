@@ -14,7 +14,9 @@
 - `app/` — Main app pages, layouts, and routing
 - `app/(dashboard)/uploads/page.tsx` — File upload UI (react-dropzone, styled with Tailwind)
 - `app/(dashboard)/providers.tsx` — React context providers (Auth0Provider, TooltipProvider)
+- `app/api/stitch/` — Stitcher backend API proxy routes
 - `lib/auth.ts` — Auth0 server-side utilities (getSession, getAccessToken, withPageAuthRequired)
+- `lib/stitcher-api.ts` — Centralized stitcher backend API endpoint configuration
 - `lib/db.ts` — Database connection logic
 - `.env.local` — All secrets and config (see README for required variables)
 - `public/` — Static assets and SVG icons
@@ -31,7 +33,8 @@
 - **App Router:** Use file-based routing in `app/` (no pages/ directory)
 - **Providers:** Wrap client context providers in `app/(dashboard)/providers.tsx` (e.g., Auth0Provider, TooltipProvider)
 - **Auth0:** Do not use NextAuth. Use @auth0/nextjs-auth0 for all authentication. Configure via `.env.local` and use server utilities from `lib/auth.ts`.
-- **Environment Variables:** Use `.env.local` with project-specific names (e.g., `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`). For client-side access, use `NEXT_PUBLIC_` prefix.
+- **Environment Variables:** Use `.env.local` with project-specific names (e.g., `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`, `STITCHER_API_BASE_URL`). For client-side access, use `NEXT_PUBLIC_` prefix.
+- **Backend API URLs:** All stitcher backend endpoints are centralized in `lib/stitcher-api.ts`. Use `getStitcherApiUrl()` to build backend URLs. Never hardcode backend paths in API routes.
 - **Styling:** Use Tailwind CSS classes and custom variables from `globals.css`. Follow existing color/font patterns.
 - **UI Components:** Use Shadcn UI components as the primary design language. Prefer Shadcn components over custom implementations whenever possible (Button, Card, Dialog, Table, etc.).
 - **File Organization:** Keep each TSX file under 200 lines when possible (soft limit). Break down large components into smaller, focused components in separate files.
@@ -79,6 +82,27 @@ import { Auth0Provider } from '@auth0/nextjs-auth0/client';
 export default function Providers({ children }) {
   return <Auth0Provider>{children}</Auth0Provider>;
 }
+```
+
+## Example: Backend API Calls
+```tsx
+// app/api/stitch/video/load/route.ts
+import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+import { getBackendIdToken } from '@/lib/auth';
+
+// Build the backend URL
+const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.loadVideo);
+const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
+
+// Make the request
+const response = await fetch(backendUrl, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${idToken}`
+  },
+  body: JSON.stringify({ tenant_id, video_path })
+});
 ```
 
 ---

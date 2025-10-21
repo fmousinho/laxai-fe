@@ -52,7 +52,10 @@ export interface StyleConfig {
 export interface VideoFile {
   fileName: string;
   signedUrl: string;
+  // Optional metadata returned by list_video API
   uploadedAt: string;
   size: number;
   status: 'ready' | 'processing' | 'failed';
+  folder?: string; // e.g. 'process/abc/imported/'
+  fullPath?: string; // e.g. 'process/abc/imported/file.mp4'
 }

@@ -55,9 +55,11 @@ Next, copy the `.env.example` file to `.env` and update the values. Follow the i
 - `AUTH0_SECRET` - Random string for session encryption
 - `APP_BASE_URL` - Your application base URL (e.g., `http://localhost:3000`)
 - `BACKEND_API_URL` - Backend API URL for dataprep services
-- `STITCH_API_URL` - Backend API URL for video stitching service
+- `STITCHER_API_BASE_URL` - Backend API base URL for video stitching service (e.g., `https://backend.example.com/api/v1/stitcher`)
 - `GCS_BUCKET_NAME` - Google Cloud Storage bucket name
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to GCS service account JSON
+
+**Note:** The `STITCHER_API_BASE_URL` should include the full base path (including `/api/v1/stitcher`). All stitcher endpoints are defined in `lib/stitcher-api.ts` and are relative to this base URL.
 
 ```bash
 npm i -g vercel
@@ -73,3 +75,36 @@ pnpm dev
 ```
 
 You should now be able to access the application at http://localhost:3000.
+
+## Backend API Configuration
+
+### Stitcher API Path Management
+
+All stitcher backend API calls are centrally managed through `lib/stitcher-api.ts`. This provides a single source of truth for endpoint paths and makes maintenance easy.
+
+**Key Concepts:**
+- **Base URL**: Set via `STITCHER_API_BASE_URL` environment variable (e.g., `https://backend.example.com/api/v1/stitcher`)
+- **Endpoint Definitions**: All relative paths are defined in `STITCHER_API_ENDPOINTS` object
+- **URL Builder**: Use `getStitcherApiUrl()` to construct full backend URLs
+
+**Example Usage in API Routes:**
+```typescript
+import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+
+// Build the full URL
+const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.loadVideo);
+// Result: https://backend.example.com/api/v1/stitcher/video/load
+```
+
+**Available Endpoints:**
+- `loadVideo`: `/video/load` - Load a video for stitching
+- `nextFrame(sessionId)`: `/video/next-frame/{sessionId}` - Navigate to next frame
+- `previousFrame(sessionId)`: `/video/previous-frame/{sessionId}` - Navigate to previous frame
+- `frameAnnotations(sessionId, frameId)`: `/video/frames/{sessionId}/{frameId}/annotations` - Get frame annotations
+- `frameImage(sessionId, frameId)`: `/video/frames/{sessionId}/{frameId}/image` - Get frame image
+
+**Adding New Endpoints:**
+1. Add the endpoint path to `STITCHER_API_ENDPOINTS` in `lib/stitcher-api.ts`
+2. Use `getStitcherApiUrl()` in your API route to build the full URL
+3. All routes automatically use the correct base URL from environment variables
+

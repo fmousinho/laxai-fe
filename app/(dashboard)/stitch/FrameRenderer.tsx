@@ -38,17 +38,17 @@ export function FrameRenderer({
     async (frameId: number) => {
       try {
         const response = await fetch(
-          `/api/stitch/video/frames/${sessionId}/${frameId}/recipe`
+          `/api/stitch/video/frames/${sessionId}/${frameId}/annotations`
         );
 
         if (!response.ok) {
-          throw new Error('Failed to fetch recipe');
+          throw new Error('Failed to fetch annotations');
         }
 
         const data = await response.json();
-        setCurrentRecipe(data.recipe);
+        setCurrentRecipe(data.recipe || data.annotations || null);
       } catch (error) {
-        console.error('Error fetching recipe:', error);
+        console.error('Error fetching annotations:', error);
         onError?.('Failed to load frame annotations');
       }
     },

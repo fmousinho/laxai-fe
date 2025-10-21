@@ -24,7 +24,7 @@ export function VideoSelector({ onSelectVideo }: VideoSelectorProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/gcs/list_video');
+      const response = await fetch('/api/gcs/list_video?folder=process');
       
       if (!response.ok) {
         throw new Error('Failed to fetch videos');
