@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAnnotationCanvas } from './useAnnotationCanvas';
@@ -24,6 +24,7 @@ export function FrameRenderer({
   const [isLoading, setIsLoading] = useState(false);
   const [hasNext, setHasNext] = useState(true);
   const [hasPrevious, setHasPrevious] = useState(false);
+  const hasLoadedInitialFrameRef = useRef(false);
 
   const { canvasRef, loadFrame } = useAnnotationCanvas({
     sessionId,
@@ -64,7 +65,7 @@ export function FrameRenderer({
       try {
         // Fetch recipe and load image in parallel
         await Promise.all([fetchRecipe(frameId), loadFrame(frameId)]);
-        
+
         setCurrentFrameId(frameId);
       } catch (error) {
         console.error('Error loading frame:', error);
@@ -93,7 +94,7 @@ export function FrameRenderer({
 
       const metadata: FrameMetadata = await response.json();
       await loadFrameWithRecipe(metadata.frame_id);
-      
+
       setHasNext(metadata.has_next_frame);
       setHasPrevious(metadata.has_previous_frame);
     } catch (error) {
@@ -119,7 +120,7 @@ export function FrameRenderer({
 
       const metadata: FrameMetadata = await response.json();
       await loadFrameWithRecipe(metadata.frame_id);
-      
+
       setHasNext(metadata.has_next_frame);
       setHasPrevious(metadata.has_previous_frame);
     } catch (error) {
@@ -148,7 +149,10 @@ export function FrameRenderer({
    * Load initial frame on mount
    */
   useEffect(() => {
-    loadFrameWithRecipe(0);
+    if (!hasLoadedInitialFrameRef.current) {
+      hasLoadedInitialFrameRef.current = true;
+      loadFrameWithRecipe(0);
+    }
   }, [loadFrameWithRecipe]);
 
   return (
