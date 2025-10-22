@@ -19,6 +19,7 @@ export function useAnnotationCanvas({
 }: UseAnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [colorPalette, setColorPalette] = useState<Record<number, string>>({});
+  const imageLoadedRef = useRef(false);
 
   /**
    * Get color for player ID using HSL color space
@@ -186,6 +187,8 @@ export function useAnnotationCanvas({
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
+    
+
     currentRecipe.instructions.forEach((instruction) => {
       switch (instruction.type) {
         case 'bbox':
@@ -214,6 +217,9 @@ export function useAnnotationCanvas({
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
 
+      // Mark image as not loaded
+      imageLoadedRef.current = false;
+
       try {
         // Fetch image blob
         const imageResponse = await fetch(
@@ -237,8 +243,13 @@ export function useAnnotationCanvas({
             // Draw base image
             ctx.drawImage(img, 0, 0);
 
+            // Mark image as loaded
+            imageLoadedRef.current = true;
+
             // Render annotations if recipe is loaded
-            renderAnnotations();
+            if (currentRecipe) {
+              renderAnnotations();
+            }
 
             // Clean up
             URL.revokeObjectURL(imageUrl);
@@ -257,12 +268,12 @@ export function useAnnotationCanvas({
         throw error;
       }
     },
-    [sessionId, renderAnnotations]
+    [sessionId]
   );
 
-  // Re-render annotations when recipe changes
+  // Re-render annotations when recipe changes and image is loaded
   useEffect(() => {
-    if (currentRecipe && currentFrameId !== null) {
+    if (currentRecipe && currentFrameId !== null && imageLoadedRef.current) {
       renderAnnotations();
     }
   }, [currentRecipe, currentFrameId, renderAnnotations]);

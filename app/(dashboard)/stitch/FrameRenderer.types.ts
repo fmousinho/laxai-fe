@@ -22,6 +22,37 @@ export interface Recipe {
   instructions: AnnotationInstruction[];
 }
 
+// New API response structure
+export interface DetectionData {
+  xyxy: number[][]; // Array of [x1, y1, x2, y2] bounding boxes
+  confidence: number[];
+  class_id: number[];
+  tracker_id: number[];
+  data?: {
+    frame_index?: number[];
+    old_tracker_id?: number[];
+  };
+  metadata?: Record<string, any>;
+}
+
+export interface RenderingConfig {
+  player_styles?: Record<string, any>;
+  tracker_styles?: Record<string, any>;
+  default_style?: string;
+  custom_colors?: Record<string, any>;
+}
+
+export interface ApiAnnotationsResponse {
+  frame_id: number;
+  video_id: string;
+  session_id: string;
+  detections: DetectionData;
+  rendering_config: RenderingConfig;
+  has_next: boolean;
+  has_previous: boolean;
+  total_frames: number;
+}
+
 export interface RecipeResponse {
   recipe: Recipe;
 }

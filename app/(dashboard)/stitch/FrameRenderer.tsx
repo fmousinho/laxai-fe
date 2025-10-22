@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAnnotationCanvas } from './useAnnotationCanvas';
-import type { Recipe, FrameMetadata } from './FrameRenderer.types';
+import type { Recipe, FrameMetadata, ApiAnnotationsResponse, AnnotationInstruction } from './FrameRenderer.types';
 
 interface FrameRendererProps {
   sessionId: string;
@@ -33,6 +33,39 @@ export function FrameRenderer({
   });
 
   /**
+   * Convert API response to Recipe format
+   */
+  const convertApiResponseToRecipe = useCallback((apiResponse: ApiAnnotationsResponse): Recipe => {
+    const instructions: AnnotationInstruction[] = [];
+
+    // Convert detections to annotation instructions
+    if (apiResponse.detections && apiResponse.detections.xyxy) {
+      apiResponse.detections.xyxy.forEach((bbox, index) => {
+        const [x1, y1, x2, y2] = bbox;
+        const confidence = apiResponse.detections.confidence?.[index] || 0;
+        const classId = apiResponse.detections.class_id?.[index] || 0;
+        const trackerId = apiResponse.detections.tracker_id?.[index] || -1;
+
+        instructions.push({
+          type: 'bbox',
+          coords: [x1, y1, x2, y2],
+          player_id: trackerId, // Using tracker_id as player_id
+          tracker_id: trackerId,
+          confidence: confidence,
+          label_text: `P${trackerId}`,
+          style_preset: 'default'
+        });
+      });
+    }
+
+    return {
+      frame_id: apiResponse.frame_id,
+      video_id: apiResponse.video_id,
+      instructions: instructions
+    };
+  }, []);
+
+  /**
    * Fetch recipe for current frame
    */
   const fetchRecipe = useCallback(
@@ -46,14 +79,15 @@ export function FrameRenderer({
           throw new Error('Failed to fetch annotations');
         }
 
-        const data = await response.json();
-        setCurrentRecipe(data.recipe || data.annotations || null);
+        const apiResponse: ApiAnnotationsResponse = await response.json();
+        const recipe = convertApiResponseToRecipe(apiResponse);
+        setCurrentRecipe(recipe);
       } catch (error) {
         console.error('Error fetching annotations:', error);
         onError?.('Failed to load frame annotations');
       }
     },
-    [sessionId, onError]
+    [sessionId, onError, convertApiResponseToRecipe]
   );
 
   /**
