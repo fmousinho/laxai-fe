@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Play, Loader2 } from 'lucide-react';
@@ -14,9 +14,13 @@ export function VideoSelector({ onSelectVideo }: VideoSelectorProps) {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    fetchVideos();
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchVideos();
+    }
   }, []);
 
   const fetchVideos = async () => {
