@@ -32,7 +32,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to fetch frame annotations' },
+        { error: `${await response.text()}` },
         { status: response.status }
       );
     }

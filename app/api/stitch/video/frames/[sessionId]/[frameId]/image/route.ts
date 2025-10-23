@@ -34,7 +34,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to fetch frame image' },
+        { error: `${await response.text()}` },
         { status: response.status }
       );
     }
