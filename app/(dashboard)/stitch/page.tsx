@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { VideoSelector } from './VideoSelector';
 import { FrameRenderer } from './FrameRenderer';
+import { PlayerList } from './PlayerList';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { VideoFile, VideoLoadResponse } from './FrameRenderer.types';
@@ -101,12 +102,9 @@ export default function StitchPage() {
             />
           </div>
 
-          {/* Player List Placeholder */}
-          <div className="w-full h-[300px] rounded-lg border-2 border-dashed border-border bg-muted/20 flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <p className="text-lg font-medium mb-2">Player List</p>
-              <p className="text-sm">Coming soon: Player crops and assignments</p>
-            </div>
+          {/* Player Management */}
+          <div className="w-full">
+            <PlayerList sessionId={sessionData.session_id} />
           </div>
         </div>
       )}
