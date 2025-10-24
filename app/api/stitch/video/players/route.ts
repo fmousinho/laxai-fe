@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { getBackendIdToken } from '@/lib/auth';
 import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+import type { PlayersResponse } from '@/types/api';
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const data = await response.json();
+    const data: PlayersResponse = await response.json();
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching players:', error);

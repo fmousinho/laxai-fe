@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { getBackendIdToken } from '@/lib/auth';
 import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+import type { PlayerCreateRequest } from '@/types/api';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
+    const body: PlayerCreateRequest = await req.json();
     const { player_name, tracker_ids, image_path } = body;
 
     if (!tracker_ids || !Array.isArray(tracker_ids)) {

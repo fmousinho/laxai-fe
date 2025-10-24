@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { getBackendIdToken } from '@/lib/auth';
 import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+import type { PlayerUpdateRequest } from '@/types/api';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { player_id: string } }
+  { params }: { params: Promise<{ player_id: string }> }
 ) {
   try {
     if (!STITCHER_API_BASE_URL) {
@@ -20,12 +21,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const playerId = parseInt(params.player_id);
+    const paramsResolved = await params;
+    const playerId = parseInt(paramsResolved.player_id);
     if (isNaN(playerId)) {
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }
 
-    const body = await req.json();
+    const body: Omit<PlayerUpdateRequest, 'player_id'> = await req.json();
     const { player_name, tracker_ids, image_path } = body;
 
     // Get ID token for backend authentication
@@ -74,7 +76,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { player_id: string } }
+  { params }: { params: Promise<{ player_id: string }> }
 ) {
   try {
     if (!STITCHER_API_BASE_URL) {
@@ -89,7 +91,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const playerId = parseInt(params.player_id);
+    const paramsResolved = await params;
+    const playerId = parseInt(paramsResolved.player_id);
     if (isNaN(playerId)) {
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }
@@ -131,7 +134,7 @@ export async function DELETE(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { player_id: string } }
+  { params }: { params: Promise<{ player_id: string }> }
 ) {
   try {
     if (!STITCHER_API_BASE_URL) {
@@ -146,7 +149,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const playerId = parseInt(params.player_id);
+    const paramsResolved = await params;
+    const playerId = parseInt(paramsResolved.player_id);
     if (isNaN(playerId)) {
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }

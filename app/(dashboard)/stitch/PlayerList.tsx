@@ -7,12 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Loader2, Users } from 'lucide-react';
-
-interface Player {
-  player_id: number;
-  player_name?: string;
-  tracker_ids: number[];
-}
+import type { Player } from '@/types/api';
 
 interface PlayerListProps {
   sessionId: string;

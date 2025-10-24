@@ -5,7 +5,7 @@ const STITCH_API_URL = process.env.STITCH_API_URL;
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { sessionId: string; frameId: string } }
+  { params }: { params: Promise<{ sessionId: string; frameId: string }> }
 ) {
   try {
     const tenantId = await getTenantId(req);
@@ -13,7 +13,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { sessionId, frameId } = params;
+    const { sessionId, frameId } = await params;
 
     // Proxy request to Python backend
     const response = await fetch(
