@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Loader2, Users } from 'lucide-react';
 import type { Player } from '@/types/api';
@@ -36,7 +36,7 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/stitch/video/players');
+      const response = await fetch(`/api/stitch/video/players?sessionId=${encodeURIComponent(sessionId)}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch players');
@@ -68,7 +68,7 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     }
 
     try {
-      const response = await fetch('/api/stitch/video/players/create', {
+      const response = await fetch(`/api/stitch/video/players/create?sessionId=${encodeURIComponent(sessionId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -104,7 +104,7 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     }
 
     try {
-      const response = await fetch(`/api/stitch/video/players/${editingPlayer.player_id}`, {
+      const response = await fetch(`/api/stitch/video/players/${editingPlayer.player_id}?sessionId=${encodeURIComponent(sessionId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -134,7 +134,7 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     }
 
     try {
-      const response = await fetch(`/api/stitch/video/players/${playerId}`, {
+      const response = await fetch(`/api/stitch/video/players/${playerId}?sessionId=${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
       });
 
@@ -213,6 +213,9 @@ export function PlayerList({ sessionId }: PlayerListProps) {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Player</DialogTitle>
+                <DialogDescription>
+                  Add a new player with tracker IDs for video stitching.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -311,6 +314,9 @@ export function PlayerList({ sessionId }: PlayerListProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Player</DialogTitle>
+            <DialogDescription>
+              Update player information and tracker IDs.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

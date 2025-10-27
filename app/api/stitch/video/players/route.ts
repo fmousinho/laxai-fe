@@ -18,11 +18,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    }
+
     // Get ID token for backend authentication
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
     // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.getPlayers);
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.getPlayers(sessionId));
     console.log('=== GET PLAYERS ===');
     console.log('Backend URL:', backendUrl);
     console.log('Tenant ID:', tenantId);

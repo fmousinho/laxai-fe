@@ -6,7 +6,7 @@ import type { PlayerUpdateRequest } from '@/types/api';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ player_id: string }> }
+  { params }: { params: Promise<{ player_id: string }>  }
 ) {
   try {
     if (!STITCHER_API_BASE_URL) {
@@ -27,6 +27,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    }
+
     const body: Omit<PlayerUpdateRequest, 'player_id'> = await req.json();
     const { player_name, tracker_ids, image_path } = body;
 
@@ -34,9 +40,10 @@ export async function PATCH(
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
     // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.updatePlayer(playerId));
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.updatePlayer(sessionId, playerId));
     console.log('=== UPDATE PLAYER ===');
     console.log('Backend URL:', backendUrl);
+    console.log('Session ID:', sessionId);
     console.log('Player ID:', playerId);
     console.log('Update data:', { player_name, tracker_ids, image_path});
 
@@ -97,13 +104,20 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    }
+
     // Get ID token for backend authentication
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
     // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.deletePlayer(playerId));
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.deletePlayer(sessionId, playerId));
     console.log('=== DELETE PLAYER ===');
     console.log('Backend URL:', backendUrl);
+    console.log('Session ID:', sessionId);
     console.log('Player ID:', playerId);
 
     const response = await fetch(backendUrl, {
@@ -155,13 +169,20 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid player ID' }, { status: 400 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    }
+
     // Get ID token for backend authentication
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
     // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.updatePlayer(playerId));
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.updatePlayer(sessionId, playerId));
     console.log('=== GET PLAYER ===');
     console.log('Backend URL:', backendUrl);
+    console.log('Session ID:', sessionId);
     console.log('Player ID:', playerId);
 
     const response = await fetch(backendUrl, {

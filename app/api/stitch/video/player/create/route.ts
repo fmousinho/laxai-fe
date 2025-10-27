@@ -18,6 +18,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    }
+
     const body: PlayerCreateRequest = await req.json();
     const { player_name, tracker_ids, image_path } = body;
 
@@ -29,9 +35,10 @@ export async function POST(req: NextRequest) {
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
 
     // Proxy request to Python backend
-    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.createPlayer);
+    const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.createPlayer(sessionId));
     console.log('=== CREATE PLAYER ===');
     console.log('Backend URL:', backendUrl);
+    console.log('Session ID:', sessionId);
     console.log('Tenant ID:', tenantId);
     console.log('Player data:', { player_name, tracker_ids, image_path });
 
