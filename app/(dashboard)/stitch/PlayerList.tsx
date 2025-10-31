@@ -7,13 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Loader2, Users } from 'lucide-react';
+import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
 import type { Player } from '@/types/api';
 
 interface PlayerListProps {
   sessionId: string;
+  videoId: string;
 }
 
-export function PlayerList({ sessionId }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,8 @@ export function PlayerList({ sessionId }: PlayerListProps) {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newTrackerIds, setNewTrackerIds] = useState('');
   const hasFetchedRef = useRef(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+  const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
 
   useEffect(() => {
     if (!hasFetchedRef.current && sessionId) {
@@ -149,11 +153,17 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     }
   };
 
-  const openEditDialog = (player: Player) => {
+  const openEditDialog = (player: Player, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
     setEditingPlayer(player);
     setNewPlayerName(player.player_name || '');
     setNewTrackerIds(player.tracker_ids.join(', '));
     setIsEditDialogOpen(true);
+  };
+
+  const openPlayerModal = (playerId: number) => {
+    setSelectedPlayerId(playerId);
+    setIsPlayerModalOpen(true);
   };
 
   if (isLoading) {
@@ -268,7 +278,11 @@ export function PlayerList({ sessionId }: PlayerListProps) {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {players.map((player) => (
-              <Card key={player.player_id} className="relative">
+              <Card 
+                key={player.player_id} 
+                className="relative cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => openPlayerModal(player.player_id)}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -289,14 +303,17 @@ export function PlayerList({ sessionId }: PlayerListProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openEditDialog(player)}
+                        onClick={(e) => openEditDialog(player, e)}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDeletePlayer(player.player_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePlayer(player.player_id);
+                        }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -308,6 +325,17 @@ export function PlayerList({ sessionId }: PlayerListProps) {
           </div>
         )}
       </div>
+
+      {/* Player Card Modal */}
+      {selectedPlayerId && (
+        <PlayerCardModal
+          open={isPlayerModalOpen}
+          onOpenChange={setIsPlayerModalOpen}
+          playerId={selectedPlayerId}
+          videoId={videoId}
+          sessionId={sessionId}
+        />
+      )}
 
       {/* Edit Player Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

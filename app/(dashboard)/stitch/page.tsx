@@ -104,7 +104,10 @@ export default function StitchPage() {
 
           {/* Player Management */}
           <div className="w-full">
-            <PlayerList sessionId={sessionData.session_id} />
+            <PlayerList 
+              sessionId={sessionData.session_id} 
+              videoId={sessionData.video_id}
+            />
           </div>
         </div>
       )}
