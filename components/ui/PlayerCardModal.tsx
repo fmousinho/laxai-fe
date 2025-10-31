@@ -36,6 +36,7 @@ interface PlayerCardModalProps {
   videoId: string;
   sessionId: string;
   mockPlayer?: Player; // Optional mock data for testing
+  tenantOverride?: string; // Optional tenant for testing
 }
 
 const IMAGES_PER_PAGE = 100; // 10x10 grid
@@ -46,7 +47,8 @@ export function PlayerCardModal({
   playerId, 
   videoId,
   sessionId,
-  mockPlayer
+  mockPlayer,
+  tenantOverride
 }: PlayerCardModalProps) {
   const [player, setPlayer] = useState<Player | null>(null);
   const [images, setImages] = useState<PlayerImage[]>([]);
@@ -111,6 +113,12 @@ export function PlayerCardModal({
   const fetchTenantId = useCallback(async () => {
     if (!open || tenantId) return;
 
+    // Use override when provided (tests/demo)
+    if (tenantOverride) {
+      setTenantId(tenantOverride);
+      return;
+    }
+
     try {
       const response = await fetch('/api/tenant');
       if (response.ok) {
@@ -120,7 +128,7 @@ export function PlayerCardModal({
     } catch (err) {
       console.error('Error fetching tenant ID:', err);
     }
-  }, [open, tenantId]);
+  }, [open, tenantId, tenantOverride]);
 
   // Fetch images from all tracks
   const fetchImages = useCallback(async () => {
@@ -133,7 +141,8 @@ export function PlayerCardModal({
 
       // Fetch images from each track directory
       for (const trackId of player.tracker_ids) {
-        const prefix = `laxai_dev/${tenantId}/process/${videoId}/unverified_tracks/${trackId}/`;
+        // Use bucket-relative key (do NOT include bucket name)
+        const prefix = `${tenantId}/process/${videoId}/unverified_tracks/${trackId}/`;
         
         const response = await fetch(
           `/api/gcs/list_images?prefix=${encodeURIComponent(prefix)}`
@@ -146,6 +155,9 @@ export function PlayerCardModal({
             trackId,
           }));
           allImages.push(...trackImages);
+        } else {
+          const msg = await response.text();
+          console.warn('list_images failed:', response.status, msg);
         }
       }
 

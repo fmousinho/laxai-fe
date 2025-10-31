@@ -74,6 +74,7 @@ export default function TestPage() {
         videoId={testVideoId}
         sessionId={testSessionId}
         mockPlayer={mockPlayer}
+        tenantOverride="tenant1"
       />
     </div>
   );

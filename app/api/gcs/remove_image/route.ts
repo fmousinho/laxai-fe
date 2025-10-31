@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
     // Extract the filename from the path
     const fileName = imagePath.split('/').pop();
     
-    // Create the destination path in the removed folder
-    const destinationPath = `laxai_dev/${tenantId}/process/${videoId}/unverified_tracks/removed/${fileName}`;
+  // Create the destination path in the removed folder (bucket-relative, no bucket name)
+  const destinationPath = `${tenantId}/process/${videoId}/unverified_tracks/removed/${fileName}`;
     const destinationFile = bucket.file(destinationPath);
 
     // Copy the file to the removed folder
