@@ -10,6 +10,7 @@ export interface Player {
   player_number?: number;
   team?: string;
   tracker_ids: number[];
+  image_path?: string;
 }
 
 export interface PlayerCreateRequest {

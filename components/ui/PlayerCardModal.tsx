@@ -18,7 +18,10 @@ import {
   User,
   Hash,
   Users,
-  GripHorizontal
+  GripHorizontal,
+  Eye,
+  EyeOff,
+  Info
 } from 'lucide-react';
 import type { Player } from '@/types/api';
 
@@ -39,7 +42,9 @@ interface PlayerCardModalProps {
   tenantOverride?: string; // Optional tenant for testing
 }
 
-const IMAGES_PER_PAGE = 100; // 10x10 grid
+const IMAGES_PER_ROW = 10;
+const IMAGES_INITIAL_ROWS = 5;
+const IMAGES_ROW_BATCH = 5;
 
 export function PlayerCardModal({ 
   open, 
@@ -57,9 +62,24 @@ export function PlayerCardModal({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
+  // Infinite scroll state
+  const [visibleRows, setVisibleRows] = useState(IMAGES_INITIAL_ROWS);
   const [removingImages, setRemovingImages] = useState<Set<string>>(new Set());
+  const [bulkRemoving, setBulkRemoving] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [showImageInfo, setShowImageInfo] = useState(true);
+  const [showHelp, setShowHelp] = useState(true);
+
+  // Marquee selection state
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const additiveSelectRef = useRef<boolean>(false);
+  const trackModeRef = useRef<boolean>(false);
+  const [selectionRect, setSelectionRect] = useState<{
+    left: number; top: number; width: number; height: number
+  } | null>(null);
 
   // Draggable state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -71,17 +91,50 @@ export function PlayerCardModal({
   const [editNumber, setEditNumber] = useState('');
   const [editTeam, setEditTeam] = useState('');
 
+
+  // Main image selection state
+  const [mainImagePath, setMainImagePath] = useState<string | null>(null);
+
+  // Infinite scroll logic
+  const infiniteScrollRef = useRef<HTMLDivElement | null>(null);
+  const handleGridScroll = useCallback(() => {
+    if (!gridScrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = gridScrollRef.current;
+    // If near the bottom, load more rows
+    if (scrollTop + clientHeight >= scrollHeight - 200) {
+      setVisibleRows((rows) => Math.min(rows + IMAGES_ROW_BATCH, Math.ceil(images.length / IMAGES_PER_ROW)));
+    }
+  }, [images.length]);
+
+  // Also use IntersectionObserver for robustness
+  useEffect(() => {
+    if (!infiniteScrollRef.current) return;
+    const observer = new window.IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleRows((rows) => Math.min(rows + IMAGES_ROW_BATCH, Math.ceil(images.length / IMAGES_PER_ROW)));
+      }
+    }, { root: gridScrollRef.current, threshold: 0.1 });
+    observer.observe(infiniteScrollRef.current);
+    return () => observer.disconnect();
+  }, [images.length]);
+
+  // Reset visibleRows when images change
+  useEffect(() => {
+    setVisibleRows(IMAGES_INITIAL_ROWS);
+  }, [images]);
+
   // Fetch player data
   const fetchPlayer = useCallback(async () => {
     if (!open || !playerId) return;
 
     // Use mock data if provided (for testing)
     if (mockPlayer) {
-      setPlayer(mockPlayer);
-      setEditName(mockPlayer.player_name || '');
-      setEditNumber(mockPlayer.player_number?.toString() || '');
-      setEditTeam(mockPlayer.team || '');
-      return;
+        setPlayer(mockPlayer);
+        setEditName(mockPlayer.player_name || '');
+        setEditNumber(mockPlayer.player_number?.toString() || '');
+        setEditTeam(mockPlayer.team || '');
+        setMainImagePath(mockPlayer.image_path || null);
+        return;
     }
 
     setIsLoading(true);
@@ -97,10 +150,11 @@ export function PlayerCardModal({
       }
 
       const data: Player = await response.json();
-      setPlayer(data);
-      setEditName(data.player_name || '');
-      setEditNumber(data.player_number?.toString() || '');
-      setEditTeam(data.team || '');
+        setPlayer(data);
+        setEditName(data.player_name || '');
+        setEditNumber(data.player_number?.toString() || '');
+        setEditTeam(data.team || '');
+        setMainImagePath(data.image_path || null);
     } catch (err) {
       console.error('Error fetching player:', err);
       setError('Failed to load player data');
@@ -184,7 +238,8 @@ export function PlayerCardModal({
     }
   }, [player, tenantId, fetchImages]);
 
-  const handleSave = async () => {
+  // Save player info (name, number, team, main image)
+  const handleSave = async (opts?: { imagePath?: string }) => {
     if (!player) return;
 
     setIsSaving(true);
@@ -201,6 +256,7 @@ export function PlayerCardModal({
             player_number: editNumber ? parseInt(editNumber) : undefined,
             team: editTeam.trim() || undefined,
             tracker_ids: player.tracker_ids,
+            image_path: opts?.imagePath ?? mainImagePath ?? undefined,
           }),
         }
       );
@@ -211,10 +267,22 @@ export function PlayerCardModal({
 
       const updatedPlayer: Player = await response.json();
       setPlayer(updatedPlayer);
+      setMainImagePath(updatedPlayer.image_path || null);
       setIsEditing(false);
     } catch (err) {
       console.error('Error updating player:', err);
       setError('Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Set main image handler
+  const handleSetMainImage = async (image: PlayerImage) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await handleSave({ imagePath: image.fullPath });
     } finally {
       setIsSaving(false);
     }
@@ -255,11 +323,158 @@ export function PlayerCardModal({
     }
   };
 
-  const totalPages = Math.ceil(images.length / IMAGES_PER_PAGE);
-  const paginatedImages = images.slice(
-    currentPage * IMAGES_PER_PAGE,
-    (currentPage + 1) * IMAGES_PER_PAGE
-  );
+  const handleBulkRemove = async () => {
+    if (selectedPaths.size === 0) return;
+    if (!confirm(`Remove ${selectedPaths.size} selected image(s)?`)) return;
+
+    setBulkRemoving(true);
+    setError(null);
+    const targets = images.filter(img => selectedPaths.has(img.fullPath));
+    try {
+      // Remove all in parallel
+      const results = await Promise.allSettled(
+        targets.map(image => fetch('/api/gcs/remove_image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imagePath: image.fullPath, videoId })
+        }))
+      );
+
+      const failed = results
+        .map((r, i) => ({ r, p: targets[i] }))
+        .filter(x => x.r.status === 'rejected' || (x.r.status === 'fulfilled' && !x.r.value.ok));
+
+      // Update UI for successes
+      const succeededPaths = new Set(
+        results
+          .map((r, i) => ({ r, p: targets[i] }))
+          .filter(x => x.r.status === 'fulfilled' && x.r.value.ok)
+          .map(x => x.p.fullPath)
+      );
+
+      if (succeededPaths.size > 0) {
+        setImages(prev => prev.filter(img => !succeededPaths.has(img.fullPath)));
+        setSelectedPaths(prev => {
+          const next = new Set(prev);
+          succeededPaths.forEach((p) => next.delete(p));
+          return next;
+        });
+      }
+
+      if (failed.length > 0) {
+        console.warn('Bulk remove failed for some items:', failed.map(f => f.p.fullPath));
+        setError(`Failed to remove ${failed.length} item(s)`);
+      }
+    } catch (err) {
+      console.error('Bulk remove error:', err);
+      setError('Failed to remove selected images');
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
+
+  // Helper to get container-relative coordinates accounting for scroll
+  const getContainerPoint = (e: MouseEvent | React.MouseEvent, container: HTMLDivElement) => {
+    const rect = container.getBoundingClientRect();
+    const x = (e as MouseEvent).clientX - rect.left + container.scrollLeft;
+    const y = (e as MouseEvent).clientY - rect.top + container.scrollTop;
+    return { x, y };
+  };
+
+  const onGridMouseDown = (e: React.MouseEvent) => {
+    if (!gridScrollRef.current) return;
+    // Only left-click and avoid starting on a button
+    if (e.button !== 0) return;
+    const targetEl = e.target as HTMLElement;
+    if (targetEl.closest('button')) return;
+
+    const start = getContainerPoint(e, gridScrollRef.current);
+    selectionStartRef.current = start;
+    additiveSelectRef.current = e.metaKey || e.ctrlKey || e.shiftKey;
+    trackModeRef.current = e.altKey; // Alt enables track-based selection
+    setIsSelecting(true);
+    setSelectionRect({ left: start.x, top: start.y, width: 0, height: 0 });
+    // Prevent text selection
+    e.preventDefault();
+  };
+
+  const onGridMouseMove = useCallback((e: MouseEvent) => {
+    if (!isSelecting || !gridScrollRef.current || !selectionStartRef.current) return;
+    const current = getContainerPoint(e, gridScrollRef.current);
+    const start = selectionStartRef.current;
+    const left = Math.min(start.x, current.x);
+    const top = Math.min(start.y, current.y);
+    const width = Math.abs(current.x - start.x);
+    const height = Math.abs(current.y - start.y);
+    const rect = { left, top, width, height };
+    setSelectionRect(rect);
+
+    // Compute intersections with image tiles
+    const container = gridScrollRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const nodes = container.querySelectorAll('[data-image-key]');
+    const rectIntersects = (a: {left:number;top:number;width:number;height:number}, b: {left:number;top:number;width:number;height:number}) => (
+      a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top
+    );
+
+    const toSelect = new Set<string>();
+    const tracksToSelect = new Set<number>();
+    
+    nodes.forEach((el) => {
+      const node = el as HTMLElement;
+      const key = node.dataset.imageKey as string;
+      const trackId = parseInt(node.dataset.trackId || '0', 10);
+      const r = node.getBoundingClientRect();
+      const nx = r.left - containerRect.left + container.scrollLeft;
+      const ny = r.top - containerRect.top + container.scrollTop;
+      const nr = { left: nx, top: ny, width: r.width, height: r.height };
+      if (rectIntersects(rect, nr)) {
+        toSelect.add(key);
+        if (trackModeRef.current) {
+          tracksToSelect.add(trackId);
+        }
+      }
+    });
+
+    setSelectedPaths(prev => {
+      let result: Set<string>;
+      
+      if (trackModeRef.current) {
+        // Select all images belonging to the intersected tracks
+        const trackImages = images.filter(img => tracksToSelect.has(img.trackId));
+        result = new Set(trackImages.map(img => img.fullPath));
+      } else {
+        result = toSelect;
+      }
+      
+      if (additiveSelectRef.current) {
+        const next = new Set(prev);
+        result.forEach(k => next.add(k));
+        return next;
+      }
+      return result;
+    });
+  }, [isSelecting]);
+
+  const onGridMouseUp = useCallback(() => {
+    setIsSelecting(false);
+    selectionStartRef.current = null;
+    setSelectionRect(null);
+  }, []);
+
+  useEffect(() => {
+    if (isSelecting) {
+      document.addEventListener('mousemove', onGridMouseMove);
+      document.addEventListener('mouseup', onGridMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', onGridMouseMove);
+        document.removeEventListener('mouseup', onGridMouseUp);
+      };
+    }
+  }, [isSelecting, onGridMouseMove, onGridMouseUp]);
+
+  // Only render images in view (plus a buffer row)
+  const imagesToShow = images.slice(0, visibleRows * IMAGES_PER_ROW);
 
   // Draggable handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -322,13 +537,28 @@ export function PlayerCardModal({
             className="drag-handle cursor-move select-none"
             onMouseDown={handleMouseDown}
           >
-            <div className="flex items-center gap-2">
-              <GripHorizontal className="h-5 w-5 text-muted-foreground" />
-              <DialogTitle>Player Card</DialogTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GripHorizontal className="h-5 w-5 text-muted-foreground" />
+                <DialogTitle>
+                  Player Card
+                </DialogTitle>
+              </div>
+              {player && !isEditing && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing(true);
+                  }}
+                  className="ml-2"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Info
+                </Button>
+              )}
             </div>
-            <DialogDescription>
-              View and manage player information and images
-            </DialogDescription>
         </DialogHeader>
 
           {isLoading ? (
@@ -343,145 +573,247 @@ export function PlayerCardModal({
             </div>
           ) : player ? (
             <div className="flex flex-col gap-4 overflow-hidden">
-              {/* Player Info Card */}
-              <Card>
-                <CardContent className="pt-6">
-                  {isEditing ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <label className="text-sm font-medium flex items-center gap-2">
-                            <User className="h-4 w-4" />
-                            Player Name
-                          </label>
-                          <Input
-                            placeholder="Enter name"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium flex items-center gap-2">
-                            <Hash className="h-4 w-4" />
-                            Number
-                          </label>
-                          <Input
-                            type="number"
-                            placeholder="Enter number"
-                            value={editNumber}
-                            onChange={(e) => setEditNumber(e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            Team
-                          </label>
-                          <Input
-                            placeholder="Enter team"
-                            value={editTeam}
-                            onChange={(e) => setEditTeam(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditing(false);
-                            setEditName(player.player_name || '');
-                            setEditNumber(player.player_number?.toString() || '');
-                            setEditTeam(player.team || '');
-                          }}
-                          disabled={isSaving}
-                        >
-                          Cancel
-                        </Button>
-                        <Button onClick={handleSave} disabled={isSaving}>
-                          {isSaving ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4 mr-2" />
-                              Save
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between">
+              {/* Redesigned Top Card: Main image + info in a single card */}
+              <Card className="mb-2">
+                <CardContent className="py-4 px-6 flex items-center gap-6">
+                  {/* Main image or placeholder */}
+                  <div className="w-28 h-40 bg-muted rounded-md flex items-center justify-center overflow-hidden border border-muted-foreground/20">
+                    {mainImagePath ? (
+                      <img
+                        src={images.find(img => img.fullPath === mainImagePath)?.signedUrl || mainImagePath}
+                        alt="Main"
+                        className="w-full h-full object-contain"
+                        draggable={false}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground text-center px-2 select-none">
+                        Click on an image to make main picture
+                      </span>
+                    )}
+                  </div>
+                  {/* Info section */}
+                  <div className="flex-1 flex flex-col justify-center min-w-0">
+                    {isEditing ? (
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <User className="h-5 w-5 text-muted-foreground" />
-                          <span className="text-lg font-semibold">
-                            {player.player_name || 'Unnamed Player'}
-                          </span>
-                        </div>
-                        <div className="flex gap-4 text-sm">
-                          <div className="flex items-center gap-2">
-                            <Hash className="h-4 w-4 text-muted-foreground" />
-                            <span>{player.player_number || 'No number'}</span>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-xs font-medium flex items-center gap-1">
+                              <User className="h-4 w-4" />
+                              Player Name
+                            </label>
+                            <Input
+                              placeholder="Enter name"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                            />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span>{player.team || 'No team'}</span>
+                          <div>
+                            <label className="text-xs font-medium flex items-center gap-1">
+                              <Hash className="h-4 w-4" />
+                              Number
+                            </label>
+                            <Input
+                              type="number"
+                              placeholder="Enter number"
+                              value={editNumber}
+                              onChange={(e) => setEditNumber(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium flex items-center gap-1">
+                              <Users className="h-4 w-4" />
+                              Team
+                            </label>
+                            <Input
+                              placeholder="Enter team"
+                              value={editTeam}
+                              onChange={(e) => setEditTeam(e.target.value)}
+                            />
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {player.tracker_ids.map((trackerId) => (
-                            <Badge key={trackerId} variant="secondary">
-                              Track {trackerId}
-                            </Badge>
-                          ))}
+                        <div className="flex justify-end gap-2 mt-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditName(player.player_name || '');
+                              setEditNumber(player.player_number?.toString() || '');
+                              setEditTeam(player.team || '');
+                            }}
+                            disabled={isSaving}
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={() => handleSave()} disabled={isSaving}>
+                            {isSaving ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" />
+                                Save
+                              </>
+                            )}
+                          </Button>
                         </div>
                       </div>
-                      <Button variant="outline" onClick={() => setIsEditing(true)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </Button>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-lg font-semibold truncate">{player.player_name || 'Unnamed Player'}</span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1">
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Hash className="h-4 w-4" />
+                            <span className="font-medium">{player.player_number || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Users className="h-4 w-4" />
+                            <span className="font-medium">{player.team || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                            <span>{player.tracker_ids.length} track{player.tracker_ids.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
 
               {/* Images Section */}
               <div className="flex-1 overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">
-                    Player Images ({images.length} total)
-                  </h3>
-                  {totalPages > 1 && (
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-semibold">
+                      Images ({images.length})
+                    </h3>
+                    {/* View controls group */}
+                    <div className="flex items-center gap-1 border-l pl-3">
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
-                        disabled={currentPage === 0}
+                        onClick={() => setShowHelp(!showHelp)}
+                        title={showHelp ? "Hide shortcuts" : "Show shortcuts"}
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <Info className="h-4 w-4" />
                       </Button>
-                      <span className="text-sm">
-                        Page {currentPage + 1} of {totalPages}
-                      </span>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
-                        disabled={currentPage === totalPages - 1}
+                        onClick={() => setShowImageInfo(!showImageInfo)}
+                        title={showImageInfo ? "Hide info badges" : "Show info badges"}
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        {showImageInfo ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
-                  )}
+                  </div>
+                  {/* Action controls group */}
+                  <div className="flex items-center gap-2">
+                    {selectedPaths.size > 0 && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedPaths(new Set())}
+                          disabled={bulkRemoving}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Clear
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkRemove}
+                          disabled={bulkRemoving}
+                        >
+                          {bulkRemoving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete ({selectedPaths.size})
+                            </>
+                          )}
+                        </Button>
+                        {/* Set as Main button: only if one image is selected and it's not already main */}
+                        {selectedPaths.size === 1 && (() => {
+                          const selectedPath = Array.from(selectedPaths)[0];
+                          const isMain = mainImagePath === selectedPath;
+                          return !isMain ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const img = images.find(i => i.fullPath === selectedPath);
+                                if (img) handleSetMainImage(img);
+                              }}
+                              disabled={isSaving}
+                            >
+                              Set as Main
+                            </Button>
+                          ) : (
+                            <Badge className="ml-1 bg-primary/80 text-primary-foreground">Main</Badge>
+                          );
+                        })()}
+                        {/* Move Track button: only if all images from a single track are selected */}
+                        {(() => {
+                          if (selectedPaths.size === 0) return null;
+                          // Find all trackIds in selection
+                          const selectedImages = images.filter(img => selectedPaths.has(img.fullPath));
+                          const trackIds = Array.from(new Set(selectedImages.map(img => img.trackId)));
+                          if (trackIds.length !== 1) return null;
+                          const trackId = trackIds[0];
+                          const allTrackImages = images.filter(img => img.trackId === trackId);
+                          const allSelected = allTrackImages.every(img => selectedPaths.has(img.fullPath));
+                          if (!allSelected) return null;
+                          return (
+                            <Button variant="secondary" size="sm" disabled>
+                              Move Track
+                            </Button>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {/* Keyboard shortcuts help */}
+                {showHelp && (
+                  <div className="mb-3 px-3 py-2 bg-muted/50 rounded-md text-xs text-muted-foreground">
+                    <div className="flex items-start gap-6">
+                      <div className="flex items-center gap-1.5">
+                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Click</kbd>
+                        <span>Toggle image</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Alt+Click</kbd>
+                        <span>Toggle track</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Drag</kbd>
+                        <span>Select area</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Alt+Drag</kbd>
+                        <span>Select tracks</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {isLoadingImages ? (
                   <div className="grid grid-cols-10 gap-2">
-                    {Array.from({ length: 20 }).map((_, i) => (
+                    {Array.from({ length: IMAGES_INITIAL_ROWS * IMAGES_PER_ROW }).map((_, i) => (
                       <Skeleton key={i} className="aspect-[2/3] w-full" />
                     ))}
                   </div>
@@ -490,41 +822,104 @@ export function PlayerCardModal({
                     No images found for this player
                   </div>
                 ) : (
-                  <div className="overflow-y-auto flex-1">
+                  <div
+                    ref={gridScrollRef}
+                    className="overflow-y-auto flex-1 relative select-none"
+                    onMouseDown={onGridMouseDown}
+                    onScroll={handleGridScroll}
+                  >
+                    {/* Selection rectangle overlay */}
+                    {selectionRect && (
+                      <div
+                        className="pointer-events-none absolute border border-primary bg-primary/10"
+                        style={{
+                          left: selectionRect.left,
+                          top: selectionRect.top,
+                          width: selectionRect.width,
+                          height: selectionRect.height,
+                        }}
+                      />
+                    )}
                     <div className="grid grid-cols-10 gap-2">
-                      {paginatedImages.map((image) => (
-                        <div
-                          key={image.fullPath}
-                          className="relative group aspect-[2/3] bg-muted rounded-md overflow-hidden"
-                        >
-                          <img
-                            src={image.signedUrl}
-                            alt={image.fileName}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleRemoveImage(image)}
-                              disabled={removingImages.has(image.fullPath)}
-                            >
-                              {removingImages.has(image.fullPath) ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                          <Badge 
-                            variant="secondary" 
-                            className="absolute bottom-1 left-1 text-xs"
+                      {imagesToShow.map((image) => {
+                        const isSelected = selectedPaths.has(image.fullPath);
+                        const isMain = mainImagePath === image.fullPath;
+                        return (
+                          <div
+                            key={image.fullPath}
+                            data-image-key={image.fullPath}
+                            data-track-id={image.trackId}
+                            className={
+                              `relative group aspect-[2/3] rounded-md overflow-hidden bg-muted pt-1 ` +
+                              (isSelected ? 'ring-2 ring-primary' : '')
+                            }
+                            style={{ marginTop: 2 }}
+                            onClick={(e) => {
+                              // Toggle selection on click (avoid when clicking button)
+                              const el = e.target as HTMLElement;
+                              if (el.closest('button')) return;
+                              if (e.altKey) {
+                                const trackImages = images.filter(img => img.trackId === image.trackId);
+                                const trackPaths = trackImages.map(img => img.fullPath);
+                                const allSelected = trackPaths.every(p => selectedPaths.has(p));
+                                setSelectedPaths(prev => {
+                                  const next = new Set(prev);
+                                  if (allSelected) {
+                                    trackPaths.forEach(p => next.delete(p));
+                                  } else {
+                                    trackPaths.forEach(p => next.add(p));
+                                  }
+                                  return next;
+                                });
+                              } else {
+                                setSelectedPaths(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(image.fullPath)) next.delete(image.fullPath);
+                                  else next.add(image.fullPath);
+                                  return next;
+                                });
+                              }
+                            }}
                           >
-                            T{image.trackId}
-                          </Badge>
-                        </div>
-                      ))}
+                            <div className="absolute inset-0 flex items-center justify-center p-1">
+                              <div className="w-full h-full bg-muted rounded-sm flex items-center justify-center overflow-hidden">
+                                <img
+                                  src={image.signedUrl}
+                                  alt={image.fileName}
+                                  className="w-full h-full object-contain"
+                                  draggable={false}
+                                />
+                              </div>
+                            </div>
+                            {/* Frame and Track info badge */}
+                            {showImageInfo && (
+                              <div className="absolute bottom-1 left-1 bg-muted/70 backdrop-blur-sm rounded px-1.5 py-1 text-[10px] leading-tight text-foreground">
+                                <div>frame: {(() => {
+                                  const match = image.fileName.match(/_(\d+)\.(jpg|jpeg)$/i);
+                                  return match ? match[1] : '?';
+                                })()}</div>
+                                <div>track: {image.trackId}</div>
+                              </div>
+                            )}
+                            {/* Selected indicator - checkmark */}
+                            {isSelected && (
+                              <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+                    {/* Infinite scroll sentinel */}
+                    {imagesToShow.length < images.length && (
+                      <div ref={infiniteScrollRef} className="h-8 flex items-center justify-center text-xs text-muted-foreground">
+                        Loading more images...
+                      </div>
+                    )}
+
                   </div>
                 )}
               </div>
