@@ -22,6 +22,7 @@ export const STITCHER_API_ENDPOINTS = {
   frameImage: (sessionId: string, frameId: string) => 
     `/video/frames/${sessionId}/${frameId}/image`,
   getPlayers: (sessionId: string) => `/video/players/${sessionId}`,
+  getPlayer: (sessionId: string, playerId: number) => `/video/players/${sessionId}/${playerId}`,
   createPlayer: (sessionId: string) => `/video/players/${sessionId}`,
   updatePlayer: (sessionId: string, playerId: number) => `/video/players/${sessionId}/${playerId}`,
   deletePlayer: (sessionId: string, playerId: number) => `/video/players/${sessionId}/${playerId}`,

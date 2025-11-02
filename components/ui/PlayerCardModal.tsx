@@ -142,7 +142,7 @@ export function PlayerCardModal({
 
     try {
       const response = await fetch(
-        `/api/stitch/video/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`
+        `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`
       );
 
       if (!response.ok) {
@@ -247,7 +247,7 @@ export function PlayerCardModal({
 
     try {
       const response = await fetch(
-        `/api/stitch/video/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
+        `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
