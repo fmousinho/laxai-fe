@@ -2,12 +2,16 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
+import { PlayerList } from '@/components/ui/PlayerList';
 import type { Player } from '@/types/api';
 
 export default function TestPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sessionId, setSessionId] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState('');
 
   // Test data
   const testPlayerId = 1;
@@ -23,15 +27,51 @@ export default function TestPage() {
     tracker_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
   };
 
+  const handleLoadPlayers = () => {
+    setActiveSessionId(sessionId);
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Test Page</h1>
         <p className="text-muted-foreground mt-1">
-          Test the PlayerCardModal component
+          Test components
         </p>
       </div>
 
+      {/* PlayerList Test */}
+      <Card>
+        <CardHeader>
+          <CardTitle>PlayerList Test</CardTitle>
+          <CardDescription>
+            Enter a session ID to view the list of players
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter session ID"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleLoadPlayers();
+                }
+              }}
+            />
+            <Button onClick={handleLoadPlayers} disabled={!sessionId.trim()}>
+              Load Players
+            </Button>
+          </div>
+
+          {activeSessionId && (
+            <PlayerList sessionId={activeSessionId} />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* PlayerCardModal Test */}
       <Card>
         <CardHeader>
           <CardTitle>PlayerCardModal Test</CardTitle>

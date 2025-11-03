@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
 import { getBackendIdToken } from '@/lib/auth';
 import { STITCHER_API_BASE_URL, STITCHER_API_ENDPOINTS, getStitcherApiUrl } from '@/lib/stitcher-api';
+import type { Player, PlayerUpdateRequest } from '@/types/api';
 
 export async function GET(
   req: NextRequest,
@@ -58,7 +59,7 @@ export async function GET(
       );
     }
 
-    const data = await response.json();
+    const data: Player = await response.json();
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching player:', error);
@@ -98,7 +99,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid player_id' }, { status: 400 });
     }
 
-    const body = await req.json();
+    const body: Partial<PlayerUpdateRequest> = await req.json();
 
     // Get ID token for backend authentication
     const idToken = await getBackendIdToken(STITCHER_API_BASE_URL);
@@ -129,7 +130,7 @@ export async function PATCH(
       );
     }
 
-    const data = await response.json();
+    const data: Player = await response.json();
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating player:', error);
