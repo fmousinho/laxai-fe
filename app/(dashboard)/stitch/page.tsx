@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { VideoSelector } from './VideoSelector';
 import { FrameRenderer } from './FrameRenderer';
 import { PlayerList } from '@/components/ui/PlayerList';
@@ -13,6 +13,7 @@ export default function StitchPage() {
   const [sessionData, setSessionData] = useState<VideoLoadResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playersRefreshTick, setPlayersRefreshTick] = useState(0);
 
   const handleSelectVideo = async (video: VideoFile) => {
     setIsLoading(true);
@@ -34,6 +35,7 @@ export default function StitchPage() {
       }
 
       const data: VideoLoadResponse = await response.json();
+      console.log('📹 Video load response:', data);
       setSessionData(data);
       setSelectedVideo(video);
     } catch (err) {
@@ -48,6 +50,7 @@ export default function StitchPage() {
     setSelectedVideo(null);
     setSessionData(null);
     setError(null);
+    setPlayersRefreshTick(0);
   };
 
   const handleError = (errorMessage: string) => {
@@ -99,6 +102,7 @@ export default function StitchPage() {
               videoId={sessionData.video_id}
               totalFrames={sessionData.total_frames}
               onError={handleError}
+              onFrameLoaded={() => setPlayersRefreshTick((t) => t + 1)}
             />
           </div>
 
@@ -107,6 +111,7 @@ export default function StitchPage() {
             <PlayerList 
               sessionId={sessionData.session_id} 
               videoId={sessionData.video_id}
+              refreshKey={playersRefreshTick}
             />
           </div>
         </div>

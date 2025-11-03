@@ -47,10 +47,16 @@ export async function POST(req: NextRequest) {
 
     // Proxy request to Python backend with tenant_id
     const backendUrl = getStitcherApiUrl(STITCHER_API_ENDPOINTS.loadVideo);
+    const payload = {
+      tenant_id: tenantId,
+      video_path,
+    };
+    
     console.log('=== STITCH VIDEO LOAD ===');
     console.log('Backend URL:', backendUrl);
     console.log('Tenant ID:', tenantId);
     console.log('Video path:', video_path);
+    console.log('Full payload:', JSON.stringify(payload, null, 2));
     
     const response = await fetch(backendUrl, {
       method: 'POST',
@@ -58,10 +64,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${idToken}`
       },
-      body: JSON.stringify({
-        tenant_id: tenantId,
-        video_path,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -74,6 +77,23 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
+    console.log('Backend response data:', JSON.stringify(data, null, 2));
+    
+    // Extract video_id from video_path (format: process/{video_id}/...)
+    let video_id = null;
+    if (video_path && video_path.startsWith('process/')) {
+      const pathParts = video_path.split('/');
+      if (pathParts.length >= 2) {
+        video_id = pathParts[1]; // Extract video_id from process/{video_id}/...
+      }
+    }
+    
+    // Add video_id to response if not already present
+    if (video_id && !data.video_id) {
+      data.video_id = video_id;
+      console.log('Added video_id to response:', video_id);
+    }
+    
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error loading video:', error);

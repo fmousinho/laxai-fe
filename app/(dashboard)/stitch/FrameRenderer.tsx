@@ -11,6 +11,11 @@ interface FrameRendererProps {
   videoId: string;
   totalFrames: number;
   onError?: (error: string) => void;
+  /**
+   * Called after a frame (initial, next, or previous) has been fully loaded
+   * (image + annotations) and currentFrameId is updated.
+   */
+  onFrameLoaded?: (frameId: number) => void;
 }
 
 export function FrameRenderer({
@@ -18,6 +23,7 @@ export function FrameRenderer({
   videoId,
   totalFrames,
   onError,
+  onFrameLoaded,
 }: FrameRendererProps) {
   const [currentFrameId, setCurrentFrameId] = useState<number>(0);
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
@@ -101,6 +107,8 @@ export function FrameRenderer({
         await Promise.all([fetchRecipe(frameId), loadFrame(frameId)]);
 
         setCurrentFrameId(frameId);
+        // Notify parent after successful load
+        onFrameLoaded?.(frameId);
       } catch (error) {
         console.error('Error loading frame:', error);
         onError?.('Failed to load frame');
@@ -108,7 +116,7 @@ export function FrameRenderer({
         setIsLoading(false);
       }
     },
-    [fetchRecipe, loadFrame, onError]
+    [fetchRecipe, loadFrame, onError, onFrameLoaded]
   );
 
   /**

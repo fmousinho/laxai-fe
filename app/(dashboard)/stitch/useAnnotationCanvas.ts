@@ -1,4 +1,5 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
+import { getPlayerColor } from '@/lib/player-colors';
 import type {
   Recipe,
   AnnotationInstruction,
@@ -18,23 +19,7 @@ export function useAnnotationCanvas({
   currentRecipe,
 }: UseAnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [colorPalette, setColorPalette] = useState<Record<number, string>>({});
   const imageLoadedRef = useRef(false);
-
-  /**
-   * Get color for player ID using HSL color space
-   */
-  const getPlayerColor = useCallback((playerId: number): string => {
-    if (colorPalette[playerId]) {
-      return colorPalette[playerId];
-    }
-
-    const hue = (playerId * 137.5) % 360;
-    const color = `hsl(${hue}, 70%, 50%)`;
-    
-    setColorPalette((prev) => ({ ...prev, [playerId]: color }));
-    return color;
-  }, [colorPalette]);
 
   /**
    * Dim a color by reducing opacity
@@ -79,7 +64,7 @@ export function useAnnotationCanvas({
 
       return styles[preset || 'default'];
     },
-    [getPlayerColor, dimColor]
+    [dimColor]
   );
 
   /**

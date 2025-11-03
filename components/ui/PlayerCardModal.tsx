@@ -38,6 +38,7 @@ interface PlayerCardModalProps {
   playerId: number;
   videoId: string;
   sessionId: string;
+  onPlayerUpdated?: (player: Player) => void;
   mockPlayer?: Player; // Optional mock data for testing
   tenantOverride?: string; // Optional tenant for testing
 }
@@ -52,6 +53,7 @@ export function PlayerCardModal({
   playerId, 
   videoId,
   sessionId,
+  onPlayerUpdated,
   mockPlayer,
   tenantOverride
 }: PlayerCardModalProps) {
@@ -59,7 +61,6 @@ export function PlayerCardModal({
   const [images, setImages] = useState<PlayerImage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Infinite scroll state
@@ -232,11 +233,14 @@ export function PlayerCardModal({
     fetchPlayer();
   }, [fetchPlayer]);
 
+  // Refetch images ONLY when relevant identifiers change (not on simple name/number/team edits)
+  const trackerIdsKey = (player?.tracker_ids || []).join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (player && tenantId) {
-      fetchImages();
-    }
-  }, [player, tenantId, fetchImages]);
+    if (!open || !tenantId) return;
+    if (!player || !player.tracker_ids.length) return;
+    fetchImages();
+  }, [trackerIdsKey, tenantId, videoId]);
 
   // Save player info (name, number, team, main image)
   const handleSave = async (opts?: { imagePath?: string }) => {
@@ -252,9 +256,10 @@ export function PlayerCardModal({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            player_id: playerId,
             player_name: editName.trim() || undefined,
             player_number: editNumber ? parseInt(editNumber) : undefined,
-            team: editTeam.trim() || undefined,
+            team: editTeam.trim(),
             tracker_ids: player.tracker_ids,
             image_path: opts?.imagePath ?? mainImagePath ?? undefined,
           }),
@@ -268,7 +273,22 @@ export function PlayerCardModal({
       const updatedPlayer: Player = await response.json();
       setPlayer(updatedPlayer);
       setMainImagePath(updatedPlayer.image_path || null);
-      setIsEditing(false);
+      // Sync edit fields with server response to reflect canonical values
+      setEditName(updatedPlayer.player_name || '');
+      setEditNumber(
+        typeof updatedPlayer.player_number === 'number'
+          ? String(updatedPlayer.player_number)
+          : ''
+      );
+      setEditTeam(updatedPlayer.team || '');
+      // Notify parent (e.g., PlayerList) so it can refresh/update
+      if (onPlayerUpdated) {
+        try {
+          onPlayerUpdated(updatedPlayer);
+        } catch (cbErr) {
+          console.warn('onPlayerUpdated callback threw:', cbErr);
+        }
+      }
     } catch (err) {
       console.error('Error updating player:', err);
       setError('Failed to save changes');
@@ -537,27 +557,13 @@ export function PlayerCardModal({
             className="drag-handle cursor-move select-none"
             onMouseDown={handleMouseDown}
           >
-            <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GripHorizontal className="h-5 w-5 text-muted-foreground" />
                 <DialogTitle>
                   Player Card
                 </DialogTitle>
               </div>
-              {player && !isEditing && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsEditing(true);
-                  }}
-                  className="ml-2"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Info
-                </Button>
-              )}
             </div>
         </DialogHeader>
 
@@ -591,94 +597,58 @@ export function PlayerCardModal({
                       </span>
                     )}
                   </div>
-                  {/* Info section */}
-                  <div className="flex-1 flex flex-col justify-center min-w-0">
-                    {isEditing ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-xs font-medium flex items-center gap-1">
-                              <User className="h-4 w-4" />
-                              Player Name
-                            </label>
-                            <Input
-                              placeholder="Enter name"
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium flex items-center gap-1">
-                              <Hash className="h-4 w-4" />
-                              Number
-                            </label>
-                            <Input
-                              type="number"
-                              placeholder="Enter number"
-                              value={editNumber}
-                              onChange={(e) => setEditNumber(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium flex items-center gap-1">
-                              <Users className="h-4 w-4" />
-                              Team
-                            </label>
-                            <Input
-                              placeholder="Enter team"
-                              value={editTeam}
-                              onChange={(e) => setEditTeam(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2 mt-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setIsEditing(false);
-                              setEditName(player.player_name || '');
-                              setEditNumber(player.player_number?.toString() || '');
-                              setEditTeam(player.team || '');
-                            }}
-                            disabled={isSaving}
-                          >
-                            Cancel
-                          </Button>
-                          <Button onClick={() => handleSave()} disabled={isSaving}>
-                            {isSaving ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="h-4 w-4 mr-2" />
-                                Save
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-lg font-semibold truncate">{player.player_name || 'Unnamed Player'}</span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Hash className="h-4 w-4" />
-                            <span className="font-medium">{player.player_number || '—'}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Users className="h-4 w-4" />
-                            <span className="font-medium">{player.team || '—'}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                            <span>{player.tracker_ids.length} track{player.tracker_ids.length !== 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  {/* Info section - Inline editable */}
+                  <div className="flex-1 flex flex-col justify-center min-w-0 space-y-2">
+                    {/* Player Name - Click to edit (prominent) */}
+                    <div className="flex items-center gap-2">
+                      <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <Input
+                        placeholder="Click to add name"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onBlur={() => {
+                          if (editName !== (player.player_name || '')) {
+                            handleSave();
+                          }
+                        }}
+                        className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 flex-1"
+                      />
+                    </div>
+                    
+                    {/* Number - Click to edit */}
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm text-muted-foreground w-12">Number:</span>
+                      <Input
+                        type="number"
+                        placeholder="—"
+                        value={editNumber}
+                        onChange={(e) => setEditNumber(e.target.value)}
+                        onBlur={() => {
+                          if (editNumber !== (player.player_number?.toString() || '')) {
+                            handleSave();
+                          }
+                        }}
+                        className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
+                      />
+                    </div>
+                    
+                    {/* Team - Click to edit */}
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm text-muted-foreground w-12">Team:</span>
+                      <Input
+                        placeholder="—"
+                        value={editTeam}
+                        onChange={(e) => setEditTeam(e.target.value)}
+                        onBlur={() => {
+                          if (editTeam !== (player.team || '')) {
+                            handleSave();
+                          }
+                        }}
+                        className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -790,7 +760,8 @@ export function PlayerCardModal({
                 {/* Keyboard shortcuts help */}
                 {showHelp && (
                   <div className="mb-3 px-3 py-2 bg-muted/50 rounded-md text-xs text-muted-foreground">
-                    <div className="flex items-start gap-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-6">
                       <div className="flex items-center gap-1.5">
                         <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Click</kbd>
                         <span>Toggle image</span>
@@ -806,6 +777,11 @@ export function PlayerCardModal({
                       <div className="flex items-center gap-1.5">
                         <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Alt+Drag</kbd>
                         <span>Select tracks</span>
+                      </div>
+                      </div>
+                      {/* Track count - aligned right */}
+                      <div className="text-xs font-medium">
+                        {player.tracker_ids.length} track{player.tracker_ids.length !== 1 ? 's' : ''}
                       </div>
                     </div>
                   </div>
@@ -824,7 +800,7 @@ export function PlayerCardModal({
                 ) : (
                   <div
                     ref={gridScrollRef}
-                    className="overflow-y-auto flex-1 relative select-none"
+                    className="overflow-y-auto flex-1 relative select-none pb-4"
                     onMouseDown={onGridMouseDown}
                     onScroll={handleGridScroll}
                   >

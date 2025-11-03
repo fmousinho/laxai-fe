@@ -8,6 +8,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ player_id: string }> }
 ) {
+  console.log('🎯 GET /api/player/[player_id] route HIT!');
   try {
     if (!STITCHER_API_BASE_URL) {
       return NextResponse.json({

@@ -1,101 +1,131 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getPlayerColor } from '@/lib/player-colors';
+import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
 import type { Player } from '@/types/api';
 
 interface PlayerListProps {
   sessionId: string;
   videoId?: string;
+  /**
+   * When this value changes, the component will refetch the players.
+   * Useful for parent-driven refreshes after external events.
+   */
+  refreshKey?: number | string;
 }
 
-function PlayerCardSkeleton() {
+function PlayerItemSkeleton() {
   return (
-    <Card className="flex-shrink-0 w-48">
-      <CardContent className="p-4 space-y-3">
-        <Skeleton className="w-full aspect-[2/3] rounded-lg" />
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-4 w-28" />
-      </CardContent>
-    </Card>
+    <div className="flex-shrink-0 w-36 space-y-2">
+      <Skeleton className="w-full aspect-[2/3] rounded-md" />
+      <Skeleton className="h-3 w-16" />
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-3 w-12" />
+      <Skeleton className="h-3 w-20" />
+    </div>
   );
 }
 
-interface PlayerCardProps {
+interface PlayerItemProps {
   player: Player;
+  onClick: () => void;
 }
 
-function PlayerCard({ player }: PlayerCardProps) {
+function PlayerItem({ player, onClick }: PlayerItemProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const playerColor = getPlayerColor(player.player_id);
+
+  // Fetch signed URL for player image
+  useEffect(() => {
+    const fetchSignedUrl = async () => {
+      if (!player.image_path) {
+        setImageLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/gcs/signed-url?path=${encodeURIComponent(player.image_path)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSignedUrl(data.signedUrl);
+        } else {
+          console.error('Failed to fetch signed URL for player image:', player.image_path);
+          setImageError(true);
+        }
+      } catch (error) {
+        console.error('Error fetching signed URL:', error);
+        setImageError(true);
+      } finally {
+        setImageLoading(false);
+      }
+    };
+
+    fetchSignedUrl();
+  }, [player.image_path]);
 
   return (
-    <Card className="flex-shrink-0 w-48 hover:shadow-lg transition-shadow cursor-pointer">
-      <CardContent className="p-4 space-y-2">
-        {/* Image */}
-        <div className="w-full aspect-[2/3] bg-muted rounded-lg overflow-hidden relative">
-          {player.image_path && !imageError ? (
-            <>
-              {imageLoading && (
-                <Skeleton className="absolute inset-0" />
-              )}
-              <img
-                src={player.image_path}
-                alt={player.player_name || `Player ${player.player_id}`}
-                className="w-full h-full object-contain"
-                onLoad={() => setImageLoading(false)}
-                onError={() => {
-                  setImageError(true);
-                  setImageLoading(false);
-                }}
-              />
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <svg
-                className="w-16 h-16"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
-            </div>
-          )}
-        </div>
+    <div 
+      className="flex-shrink-0 w-36 space-y-2 cursor-pointer hover:opacity-80 transition-opacity"
+      onClick={onClick}
+    >
+      {/* Image */}
+      <div 
+        className="w-full aspect-[2/3] bg-muted rounded-md overflow-hidden relative"
+        style={{ border: `3px solid ${playerColor}` }}
+      >
+        {signedUrl && !imageError ? (
+          <>
+            {imageLoading && <Skeleton className="absolute inset-0" />}
+            <img
+              src={signedUrl}
+              alt={player.player_name || `Player ${player.player_id}`}
+              className="w-full h-full object-contain"
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageError(true);
+                setImageLoading(false);
+              }}
+            />
+          </>
+        ) : imageLoading && player.image_path ? (
+          <Skeleton className="absolute inset-0" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+        )}
+      </div>
 
-        {/* Player Info */}
-        <div className="space-y-1 text-sm">
-          <div className="font-medium truncate">
-            ID: {player.player_id}
-          </div>
-          <div className="text-muted-foreground truncate">
-            Name: {player.player_name || '-'}
-          </div>
-          <div className="text-muted-foreground truncate">
-            Number: {player.player_number ?? '-'}
-          </div>
-          <div className="text-muted-foreground truncate">
-            Team: {player.team || '-'}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Player Info */}
+      <div className="space-y-1 text-xs">
+        <div className="font-medium truncate">ID: {player.player_id}</div>
+        <div className="text-muted-foreground truncate">Name: {player.player_name || '-'}</div>
+        <div className="text-muted-foreground truncate">Number: {player.player_number ?? '-'}</div>
+        <div className="text-muted-foreground truncate">Team: {player.team || '-'}</div>
+      </div>
+    </div>
   );
 }
 
-export function PlayerList({ sessionId }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId, refreshKey }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // When the modal saves changes, update the local list immediately
+  const handlePlayerUpdated = (updated: Player) => {
+    setPlayers((prev) =>
+      prev.map((p) => (p.player_id === updated.player_id ? { ...p, ...updated } : p))
+    );
+  };
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -125,7 +155,14 @@ export function PlayerList({ sessionId }: PlayerListProps) {
     };
 
     fetchPlayers();
-  }, [sessionId]);
+  }, [sessionId, refreshKey]);
+
+  const handlePlayerClick = (playerId: number) => {
+    console.log('🔵 Player clicked:', { playerId, videoId, sessionId });
+    setSelectedPlayerId(playerId);
+    setIsModalOpen(true);
+    console.log('🟢 Modal state set:', { selectedPlayerId: playerId, isModalOpen: true });
+  };
 
   if (error) {
     return (
@@ -141,24 +178,51 @@ export function PlayerList({ sessionId }: PlayerListProps) {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">Players</h2>
-      
-      {isLoading ? (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <PlayerCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : players.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-          No players found for this session
-        </div>
-      ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {players.map((player) => (
-            <PlayerCard key={player.player_id} player={player} />
-          ))}
-        </div>
-      )}
+      <div className="rounded-lg border">
+        {isLoading ? (
+          <div className="flex gap-3 overflow-x-auto p-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PlayerItemSkeleton key={i} />
+            ))}
+          </div>
+        ) : players.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No players found for this session
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto p-3">
+            {players.map((player) => (
+              <PlayerItem 
+                key={player.player_id} 
+                player={player}
+                onClick={() => handlePlayerClick(player.player_id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Player Card Modal */}
+      {(() => {
+        const shouldRender = selectedPlayerId !== null && videoId;
+        console.log('🟣 Modal render check:', { 
+          selectedPlayerId, 
+          videoId, 
+          sessionId, 
+          isModalOpen, 
+          shouldRender 
+        });
+        return shouldRender ? (
+          <PlayerCardModal
+            open={isModalOpen}
+            onOpenChange={setIsModalOpen}
+            playerId={selectedPlayerId}
+            videoId={videoId}
+            sessionId={sessionId}
+            onPlayerUpdated={handlePlayerUpdated}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }
