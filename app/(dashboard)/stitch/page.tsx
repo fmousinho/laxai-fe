@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { VideoSelector } from './VideoSelector';
 import { FrameRenderer } from './FrameRenderer';
-import { PlayerList } from './PlayerList';
+import { PlayerList } from '@/components/ui/PlayerList';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { VideoFile, VideoLoadResponse } from './FrameRenderer.types';
