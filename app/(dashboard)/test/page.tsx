@@ -23,7 +23,7 @@ export default function TestPage() {
     player_id: 1,
     player_name: 'John Doe',
     player_number: 23,
-    team: 'Blue Team',
+    team_id: 1,
     tracker_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
   };
 

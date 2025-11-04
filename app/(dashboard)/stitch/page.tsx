@@ -14,7 +14,9 @@ export default function StitchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playersRefreshTick, setPlayersRefreshTick] = useState(0);
+  const [frameRefreshTrigger, setFrameRefreshTrigger] = useState(0);
   const [selectedTrackerId, setSelectedTrackerId] = useState<number | null>(null);
+  const [selectedBbox, setSelectedBbox] = useState<{ player_id: number; tracker_id?: number; bbox?: [number, number, number, number] } | null>(null);
   const [frameWidth, setFrameWidth] = useState<number>(100); // percentage
   const resizeRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -55,10 +57,23 @@ export default function StitchPage() {
     setSessionData(null);
     setError(null);
     setPlayersRefreshTick(0);
+    setFrameRefreshTrigger(0);
+    setSelectedBbox(null);
+    setSelectedTrackerId(null);
   };
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
+  };
+
+  const handlePlayerCreated = () => {
+    // Trigger frame refresh to update annotations with new player_id
+    setFrameRefreshTrigger((t) => t + 1);
+    // Also refresh player list
+    setPlayersRefreshTick((t) => t + 1);
+    // Clear selection
+    setSelectedBbox(null);
+    setSelectedTrackerId(null);
   };
 
   // Resizing logic
@@ -141,14 +156,25 @@ export default function StitchPage() {
                 sessionId={sessionData.session_id}
                 videoId={sessionData.video_id}
                 totalFrames={sessionData.total_frames}
+                refreshTrigger={frameRefreshTrigger}
                 onError={handleError}
-                onFrameLoaded={() => setPlayersRefreshTick((t) => t + 1)}
+                onFrameLoaded={() => {
+                  setPlayersRefreshTick((t) => t + 1);
+                  // Clear selection when frame changes
+                  setSelectedBbox(null);
+                  setSelectedTrackerId(null);
+                }}
+                selectedBbox={selectedBbox}
                 onSelectionChange={(sel) => {
+                  // Store the full selection for highlighting
+                  setSelectedBbox(sel);
+                  
                   // Enable creation only when the selected bbox has player_id = -1 and a valid tracker_id
                   const tracker = sel && typeof sel.tracker_id === 'number' && sel.tracker_id >= 0 ? sel.tracker_id : null;
                   const eligible = sel && sel.player_id === -1 && tracker !== null ? tracker : null;
                   setSelectedTrackerId(eligible);
                 }}
+                onAssignmentDone={handlePlayerCreated}
               />
             </div>
 
@@ -178,6 +204,7 @@ export default function StitchPage() {
               videoId={sessionData.video_id}
               refreshKey={playersRefreshTick}
               selectedUnassignedTrackerId={selectedTrackerId}
+              onPlayerCreated={handlePlayerCreated}
             />
           </div>
         </div>

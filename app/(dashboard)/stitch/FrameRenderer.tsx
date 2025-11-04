@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAnnotationCanvas } from './useAnnotationCanvas';
 import type { Recipe, FrameMetadata, ApiAnnotationsResponse, AnnotationInstruction } from './FrameRenderer.types';
@@ -10,6 +11,10 @@ interface FrameRendererProps {
   sessionId: string;
   videoId: string;
   totalFrames: number;
+  /**
+   * When this value changes, forces a refresh of the current frame
+   */
+  refreshTrigger?: number;
   onError?: (error: string) => void;
   /**
    * Called after a frame (initial, next, or previous) has been fully loaded
@@ -19,7 +24,16 @@ interface FrameRendererProps {
   /**
    * Called when user clicks a bbox on the canvas. Provides player_id and tracker_id (if any).
    */
-  onSelectionChange?: (sel: { tracker_id?: number; player_id: number } | null) => void;
+  onSelectionChange?: (sel: { tracker_id?: number; player_id: number; bbox?: [number, number, number, number] } | null) => void;
+  /**
+   * Currently selected bbox to highlight
+   */
+  selectedBbox?: { player_id: number; tracker_id?: number; bbox?: [number, number, number, number] } | null;
+  /**
+   * Called after successfully creating a new player from tracker or assigning tracker to an existing player.
+   * Parent can use this to refresh frame and player list.
+   */
+  onAssignmentDone?: () => void;
 }
 
 interface CachedFrame {
@@ -35,9 +49,12 @@ export function FrameRenderer({
   sessionId,
   videoId,
   totalFrames,
+  refreshTrigger,
   onError,
   onFrameLoaded,
   onSelectionChange,
+  selectedBbox,
+  onAssignmentDone,
 }: FrameRendererProps) {
   const [currentFrameId, setCurrentFrameId] = useState<number>(0);
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
@@ -46,13 +63,23 @@ export function FrameRenderer({
   const [hasPrevious, setHasPrevious] = useState(false);
   const hasLoadedInitialFrameRef = useRef(false);
   const frameCacheRef = useRef<Map<number, CachedFrame>>(new Map());
+  const lastRefreshTriggerRef = useRef<number | undefined>(undefined);
 
   const { canvasRef, loadFrame } = useAnnotationCanvas({
     sessionId,
     currentFrameId,
     currentRecipe,
     onSelectionChange,
+    selectedBbox,
   });
+
+  // Callout UI state
+  const [calloutPos, setCalloutPos] = useState<{ left: number; top: number } | null>(null);
+  const [showExistingInput, setShowExistingInput] = useState(false);
+  const [existingIdInput, setExistingIdInput] = useState('');
+  const [calloutBusy, setCalloutBusy] = useState(false);
+  const [calloutError, setCalloutError] = useState<string | null>(null);
+  const existingInputRef = useRef<HTMLInputElement>(null);
 
   /**
    * Convert API response to Recipe format
@@ -179,6 +206,10 @@ export function FrameRenderer({
           await loadFrame(frameId, cached.imageBlob, cached.recipe);
           setCurrentRecipe(cached.recipe);
           setCurrentFrameId(frameId);
+          
+          // Auto-emphasize first unknown player if present
+          autoEmphasizeUnknownPlayer(cached.recipe);
+          
           onFrameLoaded?.(frameId);
         } catch (error) {
           console.error('Error loading cached frame:', error);
@@ -206,6 +237,10 @@ export function FrameRenderer({
 
         setCurrentRecipe(recipe);
         setCurrentFrameId(frameId);
+        
+        // Auto-emphasize first unknown player if present
+        autoEmphasizeUnknownPlayer(recipe);
+        
         onFrameLoaded?.(frameId);
       } catch (error) {
         console.error('Error loading frame:', error);
@@ -214,8 +249,28 @@ export function FrameRenderer({
         setIsLoading(false);
       }
     },
-    [fetchRecipe, loadFrame, onError, onFrameLoaded, getFromCache, addToCache]
+    [fetchRecipe, loadFrame, onError, onFrameLoaded, getFromCache, addToCache, onSelectionChange]
   );
+
+  /**
+   * Auto-select the first unknown player (player_id = -1) when a frame loads
+   */
+  const autoEmphasizeUnknownPlayer = useCallback((recipe: Recipe | null) => {
+    if (!recipe || !onSelectionChange) return;
+    
+    // Find first unknown bbox instruction
+    const unknownBbox = recipe.instructions.find(
+      (ins) => ins.type === 'bbox' && ins.player_id === -1 && typeof ins.tracker_id === 'number' && ins.tracker_id >= 0
+    );
+    
+    if (unknownBbox && unknownBbox.type === 'bbox') {
+      onSelectionChange({
+        player_id: unknownBbox.player_id,
+        tracker_id: unknownBbox.tracker_id,
+        bbox: unknownBbox.coords as [number, number, number, number],
+      });
+    }
+  }, [onSelectionChange]);
 
   /**
    * Navigate to next frame
@@ -270,10 +325,26 @@ export function FrameRenderer({
   }, [sessionId, hasPrevious, isLoading, loadFrameWithRecipe, onError]);
 
   /**
-   * Keyboard shortcuts for navigation
+   * Keyboard shortcuts for navigation and callout actions
    */
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Callout actions take precedence when visible
+      const isCalloutActive = !!(selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined);
+
+      if (isCalloutActive && (event.key === 'n' || event.key === 'N')) {
+        event.preventDefault();
+        handleCreateFromTracker();
+        return;
+      }
+      if (isCalloutActive && (event.key === 'e' || event.key === 'E')) {
+        event.preventDefault();
+        setShowExistingInput(true);
+        // Focus input next tick
+        setTimeout(() => existingInputRef.current?.focus(), 0);
+        return;
+      }
+
       if (event.key === 'ArrowLeft') {
         event.preventDefault(); // Prevent default scroll behavior
         handlePrevious();
@@ -297,6 +368,135 @@ export function FrameRenderer({
     }
   }, [loadFrameWithRecipe]);
 
+  /**
+   * Refresh current frame when refreshTrigger changes (e.g., after player creation)
+   */
+  useEffect(() => {
+    // Only refresh if trigger value has actually changed
+    if (
+      refreshTrigger !== undefined && 
+      refreshTrigger > 0 && 
+      currentFrameId !== null &&
+      refreshTrigger !== lastRefreshTriggerRef.current
+    ) {
+      console.log(`🔄 Refreshing frame ${currentFrameId} due to trigger change (${lastRefreshTriggerRef.current} -> ${refreshTrigger})`);
+      lastRefreshTriggerRef.current = refreshTrigger;
+      
+      // Clear cache for current frame to force refetch
+      frameCacheRef.current.delete(currentFrameId);
+      
+      // Reload current frame
+      loadFrameWithRecipe(currentFrameId);
+    }
+  }, [refreshTrigger, currentFrameId, loadFrameWithRecipe]);
+
+  /**
+   * Compute callout position when selection changes
+   */
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    if (!selectedBbox || selectedBbox.player_id !== -1 || selectedBbox.tracker_id === undefined || !selectedBbox.bbox) {
+      setCalloutPos(null);
+      setShowExistingInput(false);
+      setExistingIdInput('');
+      setCalloutError(null);
+      return;
+    }
+    const [x1, y1, x2] = selectedBbox.bbox;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+
+    const calloutLeft = Math.round(x2 * scaleX + 8); // 8px to the right of bbox
+    const calloutTop = Math.round(y1 * scaleY);
+    setCalloutPos({ left: calloutLeft, top: calloutTop });
+  }, [selectedBbox, canvasRef]);
+
+  /**
+   * Create new player from selected unassigned tracker
+   */
+  const handleCreateFromTracker = useCallback(async () => {
+    if (!selectedBbox || selectedBbox.player_id !== -1 || selectedBbox.tracker_id === undefined) return;
+    if (calloutBusy) return;
+    setCalloutBusy(true);
+    setCalloutError(null);
+    try {
+      const resp = await fetch(`/api/player/create?sessionId=${encodeURIComponent(sessionId)}` , {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracker_ids: [selectedBbox.tracker_id] }),
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(`Create failed: ${resp.status} ${msg}`);
+      }
+      // Success: ask parent to refresh frame and list
+      onAssignmentDone?.();
+    } catch (e: any) {
+      console.error('Error creating player from tracker:', e);
+      setCalloutError(e?.message || 'Failed to create player');
+    } finally {
+      setCalloutBusy(false);
+    }
+  }, [selectedBbox, calloutBusy, sessionId, onAssignmentDone]);
+
+  /**
+   * Assign selected tracker to existing player by ID
+   */
+  const handleAssignToExisting = useCallback(async () => {
+    if (!selectedBbox || selectedBbox.player_id !== -1 || selectedBbox.tracker_id === undefined) return;
+    const idStr = existingIdInput.trim();
+    const targetId = Number(idStr);
+    if (!idStr || !Number.isFinite(targetId)) {
+      setCalloutError('Enter a valid player ID');
+      return;
+    }
+    if (calloutBusy) return;
+    setCalloutBusy(true);
+    setCalloutError(null);
+    try {
+      // Verify player exists and get ALL current data
+      const getResp = await fetch(`/api/player/${encodeURIComponent(String(targetId))}?sessionId=${encodeURIComponent(sessionId)}`);
+      if (!getResp.ok) {
+        const msg = await getResp.text();
+        throw new Error(`Player ${targetId} not found: ${msg}`);
+      }
+      const existingPlayer = await getResp.json();
+      const current: number[] = Array.isArray(existingPlayer.tracker_ids) ? existingPlayer.tracker_ids : [];
+      if (current.includes(selectedBbox.tracker_id)) {
+        // Already assigned; just refresh
+        onAssignmentDone?.();
+        return;
+      }
+      const next = Array.from(new Set([...current, selectedBbox.tracker_id]));
+      
+      // Send ALL player data back with updated tracker_ids
+      const patchResp = await fetch(`/api/player/${encodeURIComponent(String(targetId))}?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_id: existingPlayer.player_id,
+          player_name: existingPlayer.player_name,
+          player_number: existingPlayer.player_number,
+          team_id: existingPlayer.team_id,
+          image_path: existingPlayer.image_path,
+          tracker_ids: next,
+        }),
+      });
+      if (!patchResp.ok) {
+        const msg = await patchResp.text();
+        throw new Error(`Assign failed: ${patchResp.status} ${msg}`);
+      }
+      onAssignmentDone?.();
+    } catch (e: any) {
+      console.error('Error assigning tracker to existing player:', e);
+      setCalloutError(e?.message || 'Failed to assign to existing player');
+    } finally {
+      setCalloutBusy(false);
+    }
+  }, [existingIdInput, selectedBbox, sessionId, onAssignmentDone, calloutBusy]);
+
   return (
     <div className="relative w-full">
       {/* Frame Info */}
@@ -315,6 +515,42 @@ export function FrameRenderer({
           ref={canvasRef}
           className="w-full h-auto block"
         />
+
+        {/* Assignment Callout for unassigned bbox */}
+        {calloutPos && selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined && (
+          <div
+            className="absolute z-10 rounded-md border bg-popover text-popover-foreground shadow-md p-3 w-64"
+            style={{ left: calloutPos.left, top: calloutPos.top }}
+          >
+            <div className="text-xs text-muted-foreground mb-2">Assign selected bbox (tracker {selectedBbox.tracker_id})</div>
+            <div className="flex items-center gap-2 mb-2">
+              <Button size="sm" variant="secondary" disabled={calloutBusy} onClick={handleCreateFromTracker} title="N">
+                New player (N)
+              </Button>
+              <Button size="sm" variant="secondary" disabled={calloutBusy} onClick={() => { setShowExistingInput(true); setTimeout(() => existingInputRef.current?.focus(), 0); }} title="E">
+                Existing (E)
+              </Button>
+            </div>
+            {showExistingInput && (
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={existingInputRef}
+                  value={existingIdInput}
+                  onChange={(e) => setExistingIdInput(e.target.value)}
+                  placeholder="Enter player ID"
+                  className="h-8"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAssignToExisting(); } }}
+                />
+                <Button size="sm" onClick={handleAssignToExisting} disabled={calloutBusy}>
+                  Assign
+                </Button>
+              </div>
+            )}
+            {calloutError && (
+              <div className="mt-2 text-xs text-destructive">{calloutError}</div>
+            )}
+          </div>
+        )}
 
         {/* Overlaid Navigation Buttons */}
         <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
@@ -349,7 +585,7 @@ export function FrameRenderer({
 
       {/* Keyboard Hints */}
       <div className="mt-2 text-xs text-muted-foreground text-center">
-        Use arrow keys (← →) to navigate frames
+        Use arrow keys (← →) to navigate frames. When an unassigned bbox is selected: N = New, E = Existing.
       </div>
     </div>
   );

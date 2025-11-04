@@ -12,7 +12,8 @@ interface UseAnnotationCanvasProps {
   sessionId: string | null;
   currentFrameId: number | null;
   currentRecipe: Recipe | null;
-  onSelectionChange?: (sel: { tracker_id?: number; player_id: number } | null) => void;
+  onSelectionChange?: (sel: { tracker_id?: number; player_id: number; bbox?: [number, number, number, number] } | null) => void;
+  selectedBbox?: { player_id: number; tracker_id?: number; bbox?: [number, number, number, number] } | null;
 }
 
 export function useAnnotationCanvas({
@@ -20,9 +21,11 @@ export function useAnnotationCanvas({
   currentFrameId,
   currentRecipe,
   onSelectionChange,
+  selectedBbox,
 }: UseAnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageLoadedRef = useRef(false);
+  const baseImageRef = useRef<ImageData | null>(null);
   const selectionCbRef = useRef(onSelectionChange);
 
   useEffect(() => {
@@ -57,39 +60,69 @@ export function useAnnotationCanvas({
   }, []);
 
   /**
+   * Check if an instruction matches the selected bbox
+   */
+  const isSelected = useCallback(
+    (instruction: AnnotationInstruction): boolean => {
+      if (!selectedBbox) return false;
+      
+      // Match by player_id if it's >= 0
+      if (selectedBbox.player_id >= 0 && instruction.player_id === selectedBbox.player_id) {
+        return true;
+      }
+      
+      // For unidentified players (player_id === -1), match by tracker_id
+      if (
+        selectedBbox.player_id === -1 &&
+        instruction.player_id === -1 &&
+        selectedBbox.tracker_id !== undefined &&
+        instruction.tracker_id === selectedBbox.tracker_id
+      ) {
+        return true;
+      }
+      
+      return false;
+    },
+    [selectedBbox]
+  );
+
+  /**
    * Get style configuration for player and preset
    */
   const getStyle = useCallback(
-    (preset: StylePreset | undefined, playerId: number): StyleConfig => {
+    (preset: StylePreset | undefined, playerId: number, instruction?: AnnotationInstruction): StyleConfig => {
       const baseColor = getPlayerColor(playerId);
+      
+      // Check if this instruction is selected
+      const selected = instruction ? isSelected(instruction) : false;
 
       const styles: Record<StylePreset, StyleConfig> = {
         default: {
           bbox_color: baseColor,
-          bbox_thickness: 2,
+          bbox_thickness: selected ? 5 : 2,
           label_bg_color: 'black',
           label_text_color: 'white',
-          label_font_size: 14,
+          label_font_size: selected ? 18 : 14,
         },
         highlighted: {
           bbox_color: baseColor,
-          bbox_thickness: 3,
+          bbox_thickness: selected ? 6 : 3,
           label_bg_color: baseColor,
           label_text_color: 'white',
-          label_font_size: 16,
+          label_font_size: selected ? 20 : 16,
         },
         dimmed: {
           bbox_color: dimColor(baseColor),
-          bbox_thickness: 1,
+          bbox_thickness: selected ? 4 : 1,
           label_bg_color: 'rgba(0,0,0,0.5)',
           label_text_color: 'white',
-          label_font_size: 12,
+          label_font_size: selected ? 16 : 12,
         },
       };
 
       return styles[preset || 'default'];
     },
-    [dimColor]
+    [dimColor, isSelected]
   );
 
   /**
@@ -98,7 +131,8 @@ export function useAnnotationCanvas({
   const drawBbox = useCallback(
     (ctx: CanvasRenderingContext2D, instruction: AnnotationInstruction) => {
       const [x1, y1, x2, y2] = instruction.coords;
-      const style = getStyle(instruction.style_preset, instruction.player_id);
+      const style = getStyle(instruction.style_preset, instruction.player_id, instruction);
+      const selected = isSelected(instruction);
 
       // For unidentified players (player_id === -1), fill with transparent color
       if (instruction.player_id === -1) {
@@ -106,7 +140,20 @@ export function useAnnotationCanvas({
         ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
       }
 
-      // Draw rectangle
+      // If selected, add a glowing effect with multiple strokes
+      if (selected) {
+        // Outer glow
+        ctx.strokeStyle = colorToRgba(style.bbox_color, 0.3);
+        ctx.lineWidth = style.bbox_thickness + 8;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        
+        // Middle glow
+        ctx.strokeStyle = colorToRgba(style.bbox_color, 0.5);
+        ctx.lineWidth = style.bbox_thickness + 4;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      }
+
+      // Draw main rectangle
       ctx.strokeStyle = style.bbox_color;
       ctx.lineWidth = style.bbox_thickness;
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
@@ -118,7 +165,7 @@ export function useAnnotationCanvas({
         
         ctx.font = `bold ${style.label_font_size}px Arial`;
         const textMetrics = ctx.measureText(label);
-        const padding = 4;
+        const padding = selected ? 6 : 4;
         const labelWidth = textMetrics.width + padding * 2;
         const labelHeight = style.label_font_size + padding * 2;
 
@@ -129,6 +176,13 @@ export function useAnnotationCanvas({
         // Label background with box color
         ctx.fillStyle = style.bbox_color;
         ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+        
+        // If selected, add a bright border around the label
+        if (selected) {
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(labelX, labelY, labelWidth, labelHeight);
+        }
 
         // Label text in white
         ctx.fillStyle = 'white';
@@ -137,7 +191,7 @@ export function useAnnotationCanvas({
         ctx.textBaseline = 'alphabetic'; // Reset to default
       }
     },
-    [getStyle, colorToRgba]
+    [getStyle, colorToRgba, isSelected]
   );
 
   /**
@@ -212,8 +266,15 @@ export function useAnnotationCanvas({
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
+    // Restore base image without annotations
+    if (baseImageRef.current) {
+      ctx.putImageData(baseImageRef.current, 0, 0);
+    } else {
+      // If no base image stored, clear canvas
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
     
-
+    // Now draw annotations on top of clean image
     currentRecipe.instructions.forEach((instruction) => {
       switch (instruction.type) {
         case 'bbox':
@@ -246,12 +307,30 @@ export function useAnnotationCanvas({
       const y = (evt.clientY - rect.top) * scaleY;
 
       const res = findBboxAtPoint(currentRecipe.instructions as any, x, y);
-      selectionCbRef.current?.(res ? { tracker_id: res.tracker_id, player_id: res.player_id } : null);
+      
+      if (res) {
+        // Check if clicking the same player - if so, deselect
+        const isSamePlayer = selectedBbox && (
+          (selectedBbox.player_id >= 0 && selectedBbox.player_id === res.player_id) ||
+          (selectedBbox.player_id === -1 && selectedBbox.tracker_id === res.tracker_id && res.player_id === -1)
+        );
+        
+        if (isSamePlayer) {
+          // Deselect
+          selectionCbRef.current?.(null);
+        } else {
+          // Select new player
+          selectionCbRef.current?.({ tracker_id: res.tracker_id, player_id: res.player_id, bbox: res.bbox });
+        }
+      } else {
+        // Clicked empty space - deselect
+        selectionCbRef.current?.(null);
+      }
     };
 
     canvas.addEventListener('click', handleClick);
     return () => canvas.removeEventListener('click', handleClick);
-  }, [currentRecipe]);
+  }, [currentRecipe, selectedBbox]);
 
   /**
    * Load image from blob and render on canvas
@@ -280,6 +359,9 @@ export function useAnnotationCanvas({
 
           // Draw base image
           ctx.drawImage(img, 0, 0);
+
+          // Store the base image without annotations for later re-rendering
+          baseImageRef.current = ctx.getImageData(0, 0, canvasRef.current!.width, canvasRef.current!.height);
 
           // Mark image as loaded
           imageLoadedRef.current = true;
@@ -363,12 +445,12 @@ export function useAnnotationCanvas({
     [sessionId, loadImageFromBlob]
   );
 
-  // Re-render annotations when recipe changes and image is loaded
+  // Re-render annotations when recipe, frame, or selection changes and image is loaded
   useEffect(() => {
     if (currentRecipe && currentFrameId !== null && imageLoadedRef.current) {
       renderAnnotations();
     }
-  }, [currentRecipe, currentFrameId, renderAnnotations]);
+  }, [currentRecipe, currentFrameId, renderAnnotations, selectedBbox]);
 
   return {
     canvasRef,

@@ -51,6 +51,7 @@
     "@types/react-dropzone": "^4.2.2",
     "@typescript-eslint/eslint-plugin": "^8.46.0",
     "@typescript-eslint/parser": "^8.46.0",
-    "eslint": "^9.36.0"
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^7.0.1"
   }
 }

@@ -3,14 +3,12 @@ import type { NextRequest } from "next/server";
 import { auth0 } from "./lib/auth0";
 
 export async function middleware(request: NextRequest) {
-  console.log(`[MIDDLEWARE] Processing request: ${request.method} ${request.nextUrl.pathname}`);
 
   // First, let Auth0 handle its middleware (session management, etc.)
   const authResponse = await auth0.middleware(request);
 
   // If Auth0 returned a response (like a redirect), return it
   if (authResponse) {
-    console.log(`[MIDDLEWARE] Auth0 returned response, forwarding`);
     return authResponse;
   }
 

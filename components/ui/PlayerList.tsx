@@ -18,6 +18,10 @@ interface PlayerListProps {
    * If provided, enables the "Create new player" tile when this tracker_id is not yet assigned.
    */
   selectedUnassignedTrackerId?: number | null;
+  /**
+   * Called after a player is successfully created from an unassigned tracker
+   */
+  onPlayerCreated?: (player: Player) => void;
 }
 
 function PlayerItemSkeleton() {
@@ -117,7 +121,7 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
   );
 }
 
-export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId, onPlayerCreated }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +208,8 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
       });
       setSelectedPlayerId(created.player_id);
       setIsModalOpen(true);
+      // Notify parent so it can refresh the frame annotations
+      onPlayerCreated?.(created);
     } catch (e) {
       console.error('Error creating player from tracker:', e);
       setError('Failed to create player');

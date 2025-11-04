@@ -30,9 +30,12 @@ const eslintConfig = [
     },
     plugins: {
       "@typescript-eslint": tseslint,
+      "react-hooks": await import('eslint-plugin-react-hooks'),
     },
     rules: {
       // Add your custom rules here
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ];
