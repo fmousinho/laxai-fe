@@ -8,7 +8,7 @@ export interface Player {
   player_id: number;
   player_name?: string;
   player_number?: number;
-  team?: string;
+  team_id?: number;
   tracker_ids: number[];
   image_path?: string;
 }
@@ -16,7 +16,7 @@ export interface Player {
 export interface PlayerCreateRequest {
   player_name?: string;
   player_number?: number;
-  team?: string;
+  team_id?: number;
   tracker_ids: number[];
   image_path?: string;
 }
@@ -25,7 +25,7 @@ export interface PlayerUpdateRequest {
   player_id: number;
   player_name?: string;
   player_number?: number;
-  team?: string;
+  team_id?: number;
   tracker_ids?: number[];
   image_path?: string;
 }

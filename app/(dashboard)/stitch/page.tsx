@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { VideoSelector } from './VideoSelector';
 import { FrameRenderer } from './FrameRenderer';
 import { PlayerList } from '@/components/ui/PlayerList';
@@ -15,6 +15,9 @@ export default function StitchPage() {
   const [error, setError] = useState<string | null>(null);
   const [playersRefreshTick, setPlayersRefreshTick] = useState(0);
   const [selectedTrackerId, setSelectedTrackerId] = useState<number | null>(null);
+  const [frameWidth, setFrameWidth] = useState<number>(100); // percentage
+  const resizeRef = useRef<HTMLDivElement>(null);
+  const [isResizing, setIsResizing] = useState(false);
 
   const handleSelectVideo = async (video: VideoFile) => {
     setIsLoading(true);
@@ -58,6 +61,37 @@ export default function StitchPage() {
     setError(errorMessage);
   };
 
+  // Resizing logic
+  const handleMouseDown = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing || !resizeRef.current) return;
+      const containerRect = resizeRef.current.parentElement?.getBoundingClientRect();
+      if (!containerRect) return;
+      const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      setFrameWidth(Math.min(Math.max(newWidth, 30), 90)); // clamp between 30% and 90%
+    },
+    [isResizing]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
   return (
     <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -96,24 +130,48 @@ export default function StitchPage() {
 
       {!isLoading && selectedVideo && sessionData && (
         <div className="space-y-6">
-          {/* Frame Renderer */}
-          <div className="w-full">
-            <FrameRenderer
-              sessionId={sessionData.session_id}
-              videoId={sessionData.video_id}
-              totalFrames={sessionData.total_frames}
-              onError={handleError}
-              onFrameLoaded={() => setPlayersRefreshTick((t) => t + 1)}
-              onSelectionChange={(sel) => {
-                // Enable creation only when the selected bbox has player_id = -1 and a valid tracker_id
-                const tracker = sel && typeof sel.tracker_id === 'number' && sel.tracker_id >= 0 ? sel.tracker_id : null;
-                const eligible = sel && sel.player_id === -1 && tracker !== null ? tracker : null;
-                setSelectedTrackerId(eligible);
-              }}
-            />
+          {/* Frame Renderer - Resizable Width */}
+          <div className="flex gap-4 items-start relative">
+            <div 
+              ref={resizeRef}
+              style={{ width: `${frameWidth}%` }}
+              className="transition-none"
+            >
+              <FrameRenderer
+                sessionId={sessionData.session_id}
+                videoId={sessionData.video_id}
+                totalFrames={sessionData.total_frames}
+                onError={handleError}
+                onFrameLoaded={() => setPlayersRefreshTick((t) => t + 1)}
+                onSelectionChange={(sel) => {
+                  // Enable creation only when the selected bbox has player_id = -1 and a valid tracker_id
+                  const tracker = sel && typeof sel.tracker_id === 'number' && sel.tracker_id >= 0 ? sel.tracker_id : null;
+                  const eligible = sel && sel.player_id === -1 && tracker !== null ? tracker : null;
+                  setSelectedTrackerId(eligible);
+                }}
+              />
+            </div>
+
+            {/* Resize Handle */}
+            <div
+              className="h-8 w-1 bg-border hover:bg-primary cursor-col-resize flex-shrink-0 relative group self-center"
+              onMouseDown={handleMouseDown}
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <svg className="w-4 h-8 text-muted-foreground" fill="currentColor" viewBox="0 0 16 32">
+                  <circle cx="4" cy="10" r="1.5" />
+                  <circle cx="4" cy="16" r="1.5" />
+                  <circle cx="4" cy="22" r="1.5" />
+                  <circle cx="12" cy="10" r="1.5" />
+                  <circle cx="12" cy="16" r="1.5" />
+                  <circle cx="12" cy="22" r="1.5" />
+                </svg>
+              </div>
+            </div>
           </div>
 
-          {/* Player Management */}
+          {/* Player Management - Below Frame */}
           <div className="w-full">
             <PlayerList 
               sessionId={sessionData.session_id} 

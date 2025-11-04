@@ -59,10 +59,10 @@ export function FrameRenderer({
         const trackerId = apiResponse.detections.tracker_id?.[index] ?? -1;
         const oldTrackerId = apiResponse.detections.data?.old_tracker_id?.[index];
         // Prefer actual trackerId when available; otherwise fall back to old_tracker_id from metadata
-        const effectiveTrackerId = (typeof trackerId === 'number' && trackerId >= 0)
-          ? trackerId
-          : (typeof oldTrackerId === 'number' && oldTrackerId >= 0 ? oldTrackerId : -1);
-
+        // const effectiveTrackerId = (typeof trackerId === 'number' && trackerId >= 0)
+        //   ? trackerId
+        //   : (typeof oldTrackerId === 'number' && oldTrackerId >= 0 ? oldTrackerId : -1);
+        const effectiveTrackerId = (typeof oldTrackerId === 'number' && oldTrackerId >= 0 ? oldTrackerId : -1);
         instructions.push({
           type: 'bbox',
           coords: [x1, y1, x2, y2],
@@ -188,8 +188,10 @@ export function FrameRenderer({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowLeft') {
+        event.preventDefault(); // Prevent default scroll behavior
         handlePrevious();
       } else if (event.key === 'ArrowRight') {
+        event.preventDefault(); // Prevent default scroll behavior
         handleNext();
       }
     };

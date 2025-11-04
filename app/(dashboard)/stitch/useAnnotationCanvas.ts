@@ -40,6 +40,23 @@ export function useAnnotationCanvas({
   }, []);
 
   /**
+   * Convert any color to RGBA with specified alpha
+   */
+  const colorToRgba = useCallback((color: string, alpha: number): string => {
+    // Create a temporary canvas to convert any color format to rgba
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return `rgba(128, 128, 128, ${alpha})`; // fallback gray
+    
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    const data = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgba(${data[0]}, ${data[1]}, ${data[2]}, ${alpha})`;
+  }, []);
+
+  /**
    * Get style configuration for player and preset
    */
   const getStyle = useCallback(
@@ -83,29 +100,44 @@ export function useAnnotationCanvas({
       const [x1, y1, x2, y2] = instruction.coords;
       const style = getStyle(instruction.style_preset, instruction.player_id);
 
+      // For unidentified players (player_id === -1), fill with transparent color
+      if (instruction.player_id === -1) {
+        ctx.fillStyle = colorToRgba(style.bbox_color, 0.3); // 30% opacity
+        ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+      }
+
       // Draw rectangle
       ctx.strokeStyle = style.bbox_color;
       ctx.lineWidth = style.bbox_thickness;
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
-      // Draw label
-      const label = instruction.label_text || `P${instruction.player_id}`;
-      const fullLabel = instruction.confidence
-        ? `${label} ${instruction.confidence.toFixed(2)}`
-        : label;
+      // Draw label - just player number, no "P" prefix, no confidence
+      // Use player_id directly if it's >= 0, otherwise show nothing
+      if (instruction.player_id >= 0) {
+        const label = `${instruction.player_id}`;
+        
+        ctx.font = `bold ${style.label_font_size}px Arial`;
+        const textMetrics = ctx.measureText(label);
+        const padding = 4;
+        const labelWidth = textMetrics.width + padding * 2;
+        const labelHeight = style.label_font_size + padding * 2;
 
-      ctx.font = `${style.label_font_size}px Arial`;
-      const textMetrics = ctx.measureText(fullLabel);
+        // Position label in bottom-right corner, inside the box
+        const labelX = x2 - labelWidth;
+        const labelY = y2 - labelHeight;
 
-      // Label background
-      ctx.fillStyle = style.label_bg_color;
-      ctx.fillRect(x1, y1 - 20, textMetrics.width + 10, 20);
+        // Label background with box color
+        ctx.fillStyle = style.bbox_color;
+        ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
 
-      // Label text
-      ctx.fillStyle = style.label_text_color;
-      ctx.fillText(fullLabel, x1 + 5, y1 - 5);
+        // Label text in white
+        ctx.fillStyle = 'white';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, labelX + padding, labelY + padding);
+        ctx.textBaseline = 'alphabetic'; // Reset to default
+      }
     },
-    [getStyle]
+    [getStyle, colorToRgba]
   );
 
   /**

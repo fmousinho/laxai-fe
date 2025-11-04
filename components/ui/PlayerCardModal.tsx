@@ -91,7 +91,7 @@ export function PlayerCardModal({
   // Edit state
   const [editName, setEditName] = useState('');
   const [editNumber, setEditNumber] = useState('');
-  const [editTeam, setEditTeam] = useState('');
+  const [editTeamId, setEditTeamId] = useState('');
 
 
   // Main image selection state
@@ -134,7 +134,7 @@ export function PlayerCardModal({
         setPlayer(mockPlayer);
         setEditName(mockPlayer.player_name || '');
         setEditNumber(mockPlayer.player_number?.toString() || '');
-        setEditTeam(mockPlayer.team || '');
+        setEditTeamId(mockPlayer.team_id?.toString() || '');
         setMainImagePath(mockPlayer.image_path || null);
         return;
     }
@@ -155,7 +155,7 @@ export function PlayerCardModal({
         setPlayer(data);
         setEditName(data.player_name || '');
         setEditNumber(data.player_number?.toString() || '');
-        setEditTeam(data.team || '');
+        setEditTeamId(data.team_id?.toString() || '');
         setMainImagePath(data.image_path || null);
     } catch (err) {
       console.error('Error fetching player:', err);
@@ -267,7 +267,7 @@ export function PlayerCardModal({
             player_id: playerId,
             player_name: editName.trim() || undefined,
             player_number: editNumber ? parseInt(editNumber) : undefined,
-            team: editTeam.trim(),
+            team_id: editTeamId ? parseInt(editTeamId) : undefined,
             tracker_ids: player.tracker_ids,
             image_path: opts?.imagePath ?? mainImagePath ?? undefined,
           }),
@@ -288,7 +288,11 @@ export function PlayerCardModal({
           ? String(updatedPlayer.player_number)
           : ''
       );
-      setEditTeam(updatedPlayer.team || '');
+      setEditTeamId(
+        typeof updatedPlayer.team_id === 'number'
+          ? String(updatedPlayer.team_id)
+          : ''
+      );
       // Notify parent (e.g., PlayerList) so it can refresh/update
       if (onPlayerUpdated) {
         try {
@@ -559,7 +563,6 @@ export function PlayerCardModal({
           transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`,
           transition: isDragging ? 'none' : 'transform 0.2s',
         }}
-        onPointerDownOutside={(e) => e.preventDefault()}
       >
           <DialogHeader 
             className="drag-handle cursor-move select-none"
@@ -641,16 +644,17 @@ export function PlayerCardModal({
                       />
                     </div>
                     
-                    {/* Team - Click to edit */}
+                    {/* Team ID - Click to edit */}
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <span className="text-sm text-muted-foreground w-12">Team:</span>
                       <Input
+                        type="number"
                         placeholder="—"
-                        value={editTeam}
-                        onChange={(e) => setEditTeam(e.target.value)}
+                        value={editTeamId}
+                        onChange={(e) => setEditTeamId(e.target.value)}
                         onBlur={() => {
-                          if (editTeam !== (player.team || '')) {
+                          if (editTeamId !== (player.team_id?.toString() || '')) {
                             handleSave();
                           }
                         }}

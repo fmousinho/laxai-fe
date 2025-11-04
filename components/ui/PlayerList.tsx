@@ -22,7 +22,7 @@ interface PlayerListProps {
 
 function PlayerItemSkeleton() {
   return (
-    <div className="flex-shrink-0 w-36 space-y-2">
+    <div className="flex-shrink-0 w-28 space-y-2">
       <Skeleton className="w-full aspect-[2/3] rounded-md" />
       <Skeleton className="h-3 w-16" />
       <Skeleton className="h-3 w-24" />
@@ -73,7 +73,7 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
 
   return (
     <div 
-      className="flex-shrink-0 w-36 space-y-2 cursor-pointer hover:opacity-80 transition-opacity"
+      className="flex-shrink-0 w-28 space-y-2 cursor-pointer hover:opacity-80 transition-opacity"
       onClick={onClick}
     >
       {/* Image */}
@@ -111,7 +111,7 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
         <div className="font-medium truncate">ID: {player.player_id}</div>
         <div className="text-muted-foreground truncate">Name: {player.player_name || '-'}</div>
         <div className="text-muted-foreground truncate">Number: {player.player_number ?? '-'}</div>
-        <div className="text-muted-foreground truncate">Team: {player.team || '-'}</div>
+        <div className="text-muted-foreground truncate">Team: {player.team_id ?? '-'}</div>
       </div>
     </div>
   );
@@ -240,7 +240,7 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
         ) : (
           <div className="flex gap-3 overflow-x-auto p-3">
             {/* Create new player tile */}
-            <div className="flex-shrink-0 w-36 space-y-2">
+            <div className="flex-shrink-0 w-28 space-y-2">
               <button
                 type="button"
                 onClick={handleCreateFromTracker}
