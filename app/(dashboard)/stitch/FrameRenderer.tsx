@@ -16,6 +16,10 @@ interface FrameRendererProps {
    * (image + annotations) and currentFrameId is updated.
    */
   onFrameLoaded?: (frameId: number) => void;
+  /**
+   * Called when user clicks a bbox on the canvas. Provides player_id and tracker_id (if any).
+   */
+  onSelectionChange?: (sel: { tracker_id?: number; player_id: number } | null) => void;
 }
 
 export function FrameRenderer({
@@ -24,6 +28,7 @@ export function FrameRenderer({
   totalFrames,
   onError,
   onFrameLoaded,
+  onSelectionChange,
 }: FrameRendererProps) {
   const [currentFrameId, setCurrentFrameId] = useState<number>(0);
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
@@ -36,6 +41,7 @@ export function FrameRenderer({
     sessionId,
     currentFrameId,
     currentRecipe,
+    onSelectionChange,
   });
 
   /**
@@ -50,13 +56,18 @@ export function FrameRenderer({
         const [x1, y1, x2, y2] = bbox;
         const confidence = apiResponse.detections.confidence?.[index] || 0;
         const classId = apiResponse.detections.class_id?.[index] || 0;
-        const trackerId = apiResponse.detections.tracker_id?.[index] || -1;
+        const trackerId = apiResponse.detections.tracker_id?.[index] ?? -1;
+        const oldTrackerId = apiResponse.detections.data?.old_tracker_id?.[index];
+        // Prefer actual trackerId when available; otherwise fall back to old_tracker_id from metadata
+        const effectiveTrackerId = (typeof trackerId === 'number' && trackerId >= 0)
+          ? trackerId
+          : (typeof oldTrackerId === 'number' && oldTrackerId >= 0 ? oldTrackerId : -1);
 
         instructions.push({
           type: 'bbox',
           coords: [x1, y1, x2, y2],
-          player_id: trackerId, // Using tracker_id as player_id
-          tracker_id: trackerId,
+          player_id: trackerId, // Keep label semantics: P-1 when unassigned
+          tracker_id: effectiveTrackerId,
           confidence: confidence,
           label_text: `P${trackerId}`,
           style_preset: 'default'

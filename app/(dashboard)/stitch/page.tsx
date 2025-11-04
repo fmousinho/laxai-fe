@@ -14,6 +14,7 @@ export default function StitchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playersRefreshTick, setPlayersRefreshTick] = useState(0);
+  const [selectedTrackerId, setSelectedTrackerId] = useState<number | null>(null);
 
   const handleSelectVideo = async (video: VideoFile) => {
     setIsLoading(true);
@@ -103,6 +104,12 @@ export default function StitchPage() {
               totalFrames={sessionData.total_frames}
               onError={handleError}
               onFrameLoaded={() => setPlayersRefreshTick((t) => t + 1)}
+              onSelectionChange={(sel) => {
+                // Enable creation only when the selected bbox has player_id = -1 and a valid tracker_id
+                const tracker = sel && typeof sel.tracker_id === 'number' && sel.tracker_id >= 0 ? sel.tracker_id : null;
+                const eligible = sel && sel.player_id === -1 && tracker !== null ? tracker : null;
+                setSelectedTrackerId(eligible);
+              }}
             />
           </div>
 
@@ -112,6 +119,7 @@ export default function StitchPage() {
               sessionId={sessionData.session_id} 
               videoId={sessionData.video_id}
               refreshKey={playersRefreshTick}
+              selectedUnassignedTrackerId={selectedTrackerId}
             />
           </div>
         </div>

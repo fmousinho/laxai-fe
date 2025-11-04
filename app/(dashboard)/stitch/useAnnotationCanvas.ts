@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
+import { findBboxAtPoint } from '@/lib/annotation-selection';
 import { getPlayerColor } from '@/lib/player-colors';
 import type {
   Recipe,
@@ -11,15 +12,22 @@ interface UseAnnotationCanvasProps {
   sessionId: string | null;
   currentFrameId: number | null;
   currentRecipe: Recipe | null;
+  onSelectionChange?: (sel: { tracker_id?: number; player_id: number } | null) => void;
 }
 
 export function useAnnotationCanvas({
   sessionId,
   currentFrameId,
   currentRecipe,
+  onSelectionChange,
 }: UseAnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageLoadedRef = useRef(false);
+  const selectionCbRef = useRef(onSelectionChange);
+
+  useEffect(() => {
+    selectionCbRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   /**
    * Dim a color by reducing opacity
@@ -191,6 +199,27 @@ export function useAnnotationCanvas({
       }
     });
   }, [currentRecipe, drawBbox, drawLabel, drawPoint, drawLine]);
+
+  // Handle click selection on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleClick = (evt: MouseEvent) => {
+      if (!currentRecipe) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (evt.clientX - rect.left) * scaleX;
+      const y = (evt.clientY - rect.top) * scaleY;
+
+      const res = findBboxAtPoint(currentRecipe.instructions as any, x, y);
+      selectionCbRef.current?.(res ? { tracker_id: res.tracker_id, player_id: res.player_id } : null);
+    };
+
+    canvas.addEventListener('click', handleClick);
+    return () => canvas.removeEventListener('click', handleClick);
+  }, [currentRecipe]);
 
   /**
    * Load and render frame with annotations

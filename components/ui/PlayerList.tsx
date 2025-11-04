@@ -14,6 +14,10 @@ interface PlayerListProps {
    * Useful for parent-driven refreshes after external events.
    */
   refreshKey?: number | string;
+  /**
+   * If provided, enables the "Create new player" tile when this tracker_id is not yet assigned.
+   */
+  selectedUnassignedTrackerId?: number | null;
 }
 
 function PlayerItemSkeleton() {
@@ -113,12 +117,13 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
   );
 }
 
-export function PlayerList({ sessionId, videoId, refreshKey }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // When the modal saves changes, update the local list immediately
   const handlePlayerUpdated = (updated: Player) => {
@@ -164,6 +169,49 @@ export function PlayerList({ sessionId, videoId, refreshKey }: PlayerListProps) 
     console.log('🟢 Modal state set:', { selectedPlayerId: playerId, isModalOpen: true });
   };
 
+  const assignedTrackerIds = new Set<number>(
+    players.flatMap((p) => p.tracker_ids || [])
+  );
+
+  const canCreateFromTracker =
+    typeof selectedUnassignedTrackerId === 'number' &&
+    selectedUnassignedTrackerId >= 0 &&
+    !assignedTrackerIds.has(selectedUnassignedTrackerId);
+
+  const handleCreateFromTracker = async () => {
+    if (!sessionId || !canCreateFromTracker || isCreating) return;
+    setIsCreating(true);
+    try {
+      const resp = await fetch(`/api/player/create?sessionId=${encodeURIComponent(sessionId)}` , {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracker_ids: [selectedUnassignedTrackerId] }),
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(`Create failed: ${resp.status} ${msg}`);
+      }
+      const created: Player = await resp.json();
+      // Update local list and open modal for the new player
+      setPlayers((prev) => {
+        const existingIdx = prev.findIndex((p) => p.player_id === created.player_id);
+        if (existingIdx >= 0) {
+          const copy = prev.slice();
+          copy[existingIdx] = { ...prev[existingIdx], ...created };
+          return copy;
+        }
+        return [created, ...prev];
+      });
+      setSelectedPlayerId(created.player_id);
+      setIsModalOpen(true);
+    } catch (e) {
+      console.error('Error creating player from tracker:', e);
+      setError('Failed to create player');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   if (error) {
     return (
       <div className="space-y-4">
@@ -191,6 +239,27 @@ export function PlayerList({ sessionId, videoId, refreshKey }: PlayerListProps) 
           </div>
         ) : (
           <div className="flex gap-3 overflow-x-auto p-3">
+            {/* Create new player tile */}
+            <div className="flex-shrink-0 w-36 space-y-2">
+              <button
+                type="button"
+                onClick={handleCreateFromTracker}
+                disabled={!canCreateFromTracker || isCreating}
+                className={
+                  'w-full aspect-[2/3] rounded-md border flex items-center justify-center text-center p-2 ' +
+                  (!canCreateFromTracker || isCreating
+                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                    : 'hover:bg-muted/50')
+                }
+                title={
+                  canCreateFromTracker
+                    ? 'Create new player from selected bbox'
+                    : 'Select an unassigned bbox to enable'
+                }
+              >
+                {isCreating ? 'Creating…' : 'Create new player'}
+              </button>
+            </div>
             {players.map((player) => (
               <PlayerItem 
                 key={player.player_id} 

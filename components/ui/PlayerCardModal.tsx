@@ -23,6 +23,7 @@ import {
   EyeOff,
   Info
 } from 'lucide-react';
+import { extractFrameNumber } from '@/lib/image-utils';
 import type { Player } from '@/types/api';
 
 interface PlayerImage {
@@ -215,6 +216,13 @@ export function PlayerCardModal({
           console.warn('list_images failed:', response.status, msg);
         }
       }
+
+      // Sort images by frame number (extracted from fileName)
+      allImages.sort((a, b) => {
+        const frameA = extractFrameNumber(a.fileName);
+        const frameB = extractFrameNumber(b.fileName);
+        return frameA - frameB;
+      });
 
       setImages(allImages);
     } catch (err) {
