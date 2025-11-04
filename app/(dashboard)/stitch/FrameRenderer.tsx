@@ -22,6 +22,15 @@ interface FrameRendererProps {
   onSelectionChange?: (sel: { tracker_id?: number; player_id: number } | null) => void;
 }
 
+interface CachedFrame {
+  frameId: number;
+  recipe: Recipe;
+  imageBlob: Blob;
+  timestamp: number;
+}
+
+const FRAME_CACHE_SIZE = 5;
+
 export function FrameRenderer({
   sessionId,
   videoId,
@@ -36,6 +45,7 @@ export function FrameRenderer({
   const [hasNext, setHasNext] = useState(true);
   const [hasPrevious, setHasPrevious] = useState(false);
   const hasLoadedInitialFrameRef = useRef(false);
+  const frameCacheRef = useRef<Map<number, CachedFrame>>(new Map());
 
   const { canvasRef, loadFrame } = useAnnotationCanvas({
     sessionId,
@@ -83,6 +93,50 @@ export function FrameRenderer({
   }, []);
 
   /**
+   * Manage frame cache - keep only the 5 most recent frames
+   */
+  const addToCache = useCallback((frameId: number, recipe: Recipe, imageBlob: Blob) => {
+    const cache = frameCacheRef.current;
+    
+    // Add new frame
+    cache.set(frameId, {
+      frameId,
+      recipe,
+      imageBlob,
+      timestamp: Date.now(),
+    });
+
+    // If cache exceeds size limit, remove oldest entry
+    if (cache.size > FRAME_CACHE_SIZE) {
+      let oldestKey: number | null = null;
+      let oldestTime = Infinity;
+
+      cache.forEach((value, key) => {
+        if (value.timestamp < oldestTime) {
+          oldestTime = value.timestamp;
+          oldestKey = key;
+        }
+      });
+
+      if (oldestKey !== null) {
+        cache.delete(oldestKey);
+      }
+    }
+  }, []);
+
+  /**
+   * Get frame from cache if available
+   */
+  const getFromCache = useCallback((frameId: number): CachedFrame | undefined => {
+    const cached = frameCacheRef.current.get(frameId);
+    if (cached) {
+      // Update timestamp to mark as recently used
+      cached.timestamp = Date.now();
+    }
+    return cached;
+  }, []);
+
+  /**
    * Fetch recipe for current frame
    */
   const fetchRecipe = useCallback(
@@ -98,10 +152,11 @@ export function FrameRenderer({
 
         const apiResponse: ApiAnnotationsResponse = await response.json();
         const recipe = convertApiResponseToRecipe(apiResponse);
-        setCurrentRecipe(recipe);
+        return recipe;
       } catch (error) {
         console.error('Error fetching annotations:', error);
         onError?.('Failed to load frame annotations');
+        throw error;
       }
     },
     [sessionId, onError, convertApiResponseToRecipe]
@@ -112,13 +167,45 @@ export function FrameRenderer({
    */
   const loadFrameWithRecipe = useCallback(
     async (frameId: number) => {
+      // Check cache first
+      const cached = getFromCache(frameId);
+      
+      if (cached) {
+        // Load from cache - instant!
+        console.log(`📦 Loading frame ${frameId} from cache`);
+        setIsLoading(true);
+        try {
+          // Pass the cached recipe directly to loadFrame to avoid stale state issues
+          await loadFrame(frameId, cached.imageBlob, cached.recipe);
+          setCurrentRecipe(cached.recipe);
+          setCurrentFrameId(frameId);
+          onFrameLoaded?.(frameId);
+        } catch (error) {
+          console.error('Error loading cached frame:', error);
+          onError?.('Failed to load cached frame');
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Not in cache - fetch from server
+      console.log(`🌐 Fetching frame ${frameId} from server`);
       setIsLoading(true);
       try {
-        // Fetch recipe and load image in parallel
-        await Promise.all([fetchRecipe(frameId), loadFrame(frameId)]);
+        // Fetch recipe first
+        const recipe = await fetchRecipe(frameId);
+        
+        // Then load image with the recipe
+        const imageBlob = await loadFrame(frameId, undefined, recipe);
 
+        // Add to cache
+        if (recipe && imageBlob) {
+          addToCache(frameId, recipe, imageBlob);
+        }
+
+        setCurrentRecipe(recipe);
         setCurrentFrameId(frameId);
-        // Notify parent after successful load
         onFrameLoaded?.(frameId);
       } catch (error) {
         console.error('Error loading frame:', error);
@@ -127,7 +214,7 @@ export function FrameRenderer({
         setIsLoading(false);
       }
     },
-    [fetchRecipe, loadFrame, onError, onFrameLoaded]
+    [fetchRecipe, loadFrame, onError, onFrameLoaded, getFromCache, addToCache]
   );
 
   /**

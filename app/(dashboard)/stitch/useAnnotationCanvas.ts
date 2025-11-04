@@ -254,11 +254,11 @@ export function useAnnotationCanvas({
   }, [currentRecipe]);
 
   /**
-   * Load and render frame with annotations
+   * Load image from blob and render on canvas
    */
-  const loadFrame = useCallback(
-    async (frameId: number) => {
-      if (!sessionId || !canvasRef.current) return;
+  const loadImageFromBlob = useCallback(
+    async (imageBlob: Blob, recipe?: Recipe) => {
+      if (!canvasRef.current) return;
 
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
@@ -266,55 +266,101 @@ export function useAnnotationCanvas({
       // Mark image as not loaded
       imageLoadedRef.current = false;
 
+      const imageUrl = URL.createObjectURL(imageBlob);
+      const img = new Image();
+
+      return new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          // Set canvas size to match image
+          canvasRef.current!.width = img.width;
+          canvasRef.current!.height = img.height;
+
+          // Clear canvas first
+          ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
+
+          // Draw base image
+          ctx.drawImage(img, 0, 0);
+
+          // Mark image as loaded
+          imageLoadedRef.current = true;
+
+          // Render annotations using provided recipe or current recipe
+          const recipeToRender = recipe || currentRecipe;
+          if (recipeToRender && canvasRef.current) {
+            const renderCtx = canvasRef.current.getContext('2d');
+            if (renderCtx) {
+              recipeToRender.instructions.forEach((instruction) => {
+                switch (instruction.type) {
+                  case 'bbox':
+                    drawBbox(renderCtx, instruction);
+                    break;
+                  case 'label':
+                    drawLabel(renderCtx, instruction);
+                    break;
+                  case 'point':
+                    drawPoint(renderCtx, instruction);
+                    break;
+                  case 'line':
+                    drawLine(renderCtx, instruction);
+                    break;
+                }
+              });
+            }
+          }
+
+          // Clean up
+          URL.revokeObjectURL(imageUrl);
+          resolve();
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(imageUrl);
+          reject(new Error('Failed to load image'));
+        };
+
+        img.src = imageUrl;
+      });
+    },
+    [currentRecipe, drawBbox, drawLabel, drawPoint, drawLine]
+  );
+
+  /**
+   * Load and render frame with annotations
+   */
+  const loadFrame = useCallback(
+    async (frameId: number, cachedBlob?: Blob, recipe?: Recipe) => {
+      if (!sessionId || !canvasRef.current) return;
+
+      // Mark image as not loaded
+      imageLoadedRef.current = false;
+
       try {
-        // Fetch image blob
-        const imageResponse = await fetch(
-          `/api/stitch/video/frames/${sessionId}/${frameId}/image?format=jpg`
-        );
-        
-        if (!imageResponse.ok) {
-          throw new Error('Failed to fetch frame image');
+        let imageBlob: Blob;
+
+        if (cachedBlob) {
+          // Use cached blob
+          imageBlob = cachedBlob;
+        } else {
+          // Fetch image blob
+          const imageResponse = await fetch(
+            `/api/stitch/video/frames/${sessionId}/${frameId}/image?format=jpg`
+          );
+          
+          if (!imageResponse.ok) {
+            throw new Error('Failed to fetch frame image');
+          }
+
+          imageBlob = await imageResponse.blob();
         }
 
-        const imageBlob = await imageResponse.blob();
-        const imageUrl = URL.createObjectURL(imageBlob);
-        const img = new Image();
-
-        return new Promise<void>((resolve, reject) => {
-          img.onload = () => {
-            // Set canvas size to match image
-            canvasRef.current!.width = img.width;
-            canvasRef.current!.height = img.height;
-
-            // Draw base image
-            ctx.drawImage(img, 0, 0);
-
-            // Mark image as loaded
-            imageLoadedRef.current = true;
-
-            // Render annotations if recipe is loaded
-            if (currentRecipe) {
-              renderAnnotations();
-            }
-
-            // Clean up
-            URL.revokeObjectURL(imageUrl);
-            resolve();
-          };
-
-          img.onerror = () => {
-            URL.revokeObjectURL(imageUrl);
-            reject(new Error('Failed to load image'));
-          };
-
-          img.src = imageUrl;
-        });
+        await loadImageFromBlob(imageBlob, recipe);
+        return imageBlob; // Return blob for caching
       } catch (error) {
         console.error('Error loading frame:', error);
         throw error;
       }
     },
-    [sessionId]
+    [sessionId, loadImageFromBlob]
   );
 
   // Re-render annotations when recipe changes and image is loaded
