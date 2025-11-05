@@ -41,9 +41,11 @@ interface CachedFrame {
   recipe: Recipe;
   imageBlob: Blob;
   timestamp: number;
+  // Cache version at the time this entry was saved
+  version: number;
 }
 
-const FRAME_CACHE_SIZE = 5;
+const FRAME_CACHE_SIZE = 20;
 
 export function FrameRenderer({
   sessionId,
@@ -64,6 +66,8 @@ export function FrameRenderer({
   const hasLoadedInitialFrameRef = useRef(false);
   const frameCacheRef = useRef<Map<number, CachedFrame>>(new Map());
   const lastRefreshTriggerRef = useRef<number | undefined>(undefined);
+  // Incremented on any player change to invalidate all cached recipes/images
+  const cacheVersionRef = useRef<number>(0);
 
   const { canvasRef, loadFrame } = useAnnotationCanvas({
     sessionId,
@@ -119,7 +123,7 @@ export function FrameRenderer({
   }, []);
 
   /**
-   * Manage frame cache - keep only the 5 most recent frames
+   * Manage frame cache - keep only the 20 most recent frames
    */
   const addToCache = useCallback((frameId: number, recipe: Recipe, imageBlob: Blob) => {
     const cache = frameCacheRef.current;
@@ -130,6 +134,7 @@ export function FrameRenderer({
       recipe,
       imageBlob,
       timestamp: Date.now(),
+      version: cacheVersionRef.current,
     });
 
     // If cache exceeds size limit, remove oldest entry
@@ -156,6 +161,12 @@ export function FrameRenderer({
   const getFromCache = useCallback((frameId: number): CachedFrame | undefined => {
     const cached = frameCacheRef.current.get(frameId);
     if (cached) {
+      // Ignore cached entries from a previous cache version (player changes occurred)
+      if (cached.version !== cacheVersionRef.current) {
+        // Optionally delete stale entry
+        frameCacheRef.current.delete(frameId);
+        return undefined;
+      }
       // Update timestamp to mark as recently used
       cached.timestamp = Date.now();
     }
@@ -381,8 +392,9 @@ export function FrameRenderer({
       console.log(`🔄 Refreshing frame ${currentFrameId} due to trigger change (${lastRefreshTriggerRef.current} -> ${refreshTrigger})`);
       lastRefreshTriggerRef.current = refreshTrigger;
       
-      // Clear cache for current frame to force refetch
-      frameCacheRef.current.delete(currentFrameId);
+      // Clear entire cache and bump cache version so all previously cached entries are invalid
+      frameCacheRef.current.clear();
+      cacheVersionRef.current += 1;
       
       // Reload current frame
       loadFrameWithRecipe(currentFrameId);
