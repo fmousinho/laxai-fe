@@ -619,23 +619,26 @@ export function PlayerCardModal({
                   </div>
                   {/* Info section - Inline editable */}
                   <div className="flex-1 flex flex-col justify-center min-w-0 space-y-2">
-                    {/* Player Name - Click to edit (prominent) */}
+                    {/* Player Name - Press Enter to save */}
                     <div className="flex items-center gap-2">
                       <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                       <Input
                         placeholder="Click to add name"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        onBlur={() => {
-                          if (editName !== (player.player_name || '')) {
-                            handleSave();
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editName !== (player.player_name || '')) {
+                              handleSave();
+                            }
                           }
                         }}
                         className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 flex-1"
                       />
                     </div>
                     
-                    {/* Number - Click to edit */}
+                    {/* Number - Press Enter to save */}
                     <div className="flex items-center gap-2">
                       <Hash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <span className="text-sm text-muted-foreground w-12">Number:</span>
@@ -644,16 +647,19 @@ export function PlayerCardModal({
                         placeholder="—"
                         value={editNumber}
                         onChange={(e) => setEditNumber(e.target.value)}
-                        onBlur={() => {
-                          if (editNumber !== (player.player_number?.toString() || '')) {
-                            handleSave();
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editNumber !== (player.player_number?.toString() || '')) {
+                              handleSave();
+                            }
                           }
                         }}
                         className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
                       />
                     </div>
                     
-                    {/* Team ID - Click to edit */}
+                    {/* Team ID - Press Enter to save */}
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <span className="text-sm text-muted-foreground w-12">Team:</span>
@@ -662,14 +668,42 @@ export function PlayerCardModal({
                         placeholder="—"
                         value={editTeamId}
                         onChange={(e) => setEditTeamId(e.target.value)}
-                        onBlur={() => {
-                          if (editTeamId !== (player.team_id?.toString() || '')) {
-                            handleSave();
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editTeamId !== (player.team_id?.toString() || '')) {
+                              handleSave();
+                            }
                           }
                         }}
                         className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
                       />
                     </div>
+                    
+                    {/* Save button for manual save */}
+                    {(editName !== (player.player_name || '') || 
+                      editNumber !== (player.player_number?.toString() || '') || 
+                      editTeamId !== (player.team_id?.toString() || '')) && (
+                      <div className="flex justify-end pt-1">
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleSave()}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-3 w-3 mr-1" />
+                              Save
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -756,7 +790,7 @@ export function PlayerCardModal({
                             <Badge className="ml-1 bg-primary/80 text-primary-foreground">Main</Badge>
                           );
                         })()}
-                        {/* Move Track button: only if all images from a single track are selected */}
+                        {/* Remove Track button: only if all images from a single track are selected */}
                         {(() => {
                           if (selectedPaths.size === 0) return null;
                           // Find all trackIds in selection
@@ -768,8 +802,58 @@ export function PlayerCardModal({
                           const allSelected = allTrackImages.every(img => selectedPaths.has(img.fullPath));
                           if (!allSelected) return null;
                           return (
-                            <Button variant="secondary" size="sm" disabled>
-                              Move Track
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              onClick={async () => {
+                                if (!player) return;
+                                if (!confirm(`Remove track ${trackId} from this player?`)) return;
+                                
+                                setIsSaving(true);
+                                setError(null);
+                                
+                                try {
+                                  // Remove trackId from tracker_ids array
+                                  const updatedTrackerIds = player.tracker_ids.filter(tid => tid !== trackId);
+                                  
+                                  const response = await fetch(
+                                    `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
+                                    {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        player_id: playerId,
+                                        player_name: player.player_name,
+                                        player_number: player.player_number,
+                                        team_id: player.team_id,
+                                        image_path: player.image_path,
+                                        tracker_ids: updatedTrackerIds,
+                                      }),
+                                    }
+                                  );
+
+                                  if (!response.ok) {
+                                    throw new Error('Failed to remove track from player');
+                                  }
+
+                                  const updatedPlayer: Player = await response.json();
+                                  setPlayer(updatedPlayer);
+                                  
+                                  // Clear selection and refresh images
+                                  setSelectedPaths(new Set());
+                                  
+                                  // Notify parent to refresh (frame renderer and player list)
+                                  onPlayerUpdated?.(updatedPlayer);
+                                } catch (err) {
+                                  console.error('Error removing track:', err);
+                                  setError('Failed to remove track from player');
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                              disabled={isSaving}
+                            >
+                              Remove Track
                             </Button>
                           );
                         })()}
