@@ -159,8 +159,8 @@ export default function StitchPage() {
                 refreshTrigger={frameRefreshTrigger}
                 onError={handleError}
                 onFrameLoaded={() => {
-                  setPlayersRefreshTick((t) => t + 1);
-                  // Do not clear selection; let FrameRenderer auto-emphasize unknown bbox
+                  // Only reload PlayerList on actual player changes (handled in onAssignmentDone/onPlayerCreated)
+                  // No action needed here on frame load.
                 }}
                 selectedBbox={selectedBbox}
                 onSelectionChange={(sel) => {
