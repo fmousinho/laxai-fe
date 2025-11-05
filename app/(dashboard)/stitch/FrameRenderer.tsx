@@ -73,8 +73,7 @@ export function FrameRenderer({
     selectedBbox,
   });
 
-  // Callout UI state
-  const [calloutPos, setCalloutPos] = useState<{ left: number; top: number } | null>(null);
+  // Assignment UI state
   const [showExistingInput, setShowExistingInput] = useState(false);
   const [existingIdInput, setExistingIdInput] = useState('');
   const [calloutBusy, setCalloutBusy] = useState(false);
@@ -391,27 +390,25 @@ export function FrameRenderer({
   }, [refreshTrigger, currentFrameId, loadFrameWithRecipe]);
 
   /**
-   * Compute callout position when selection changes
+   * Clear input state when selection changes or is cleared
    */
   useEffect(() => {
-    if (!canvasRef.current) return;
-    if (!selectedBbox || selectedBbox.player_id !== -1 || selectedBbox.tracker_id === undefined || !selectedBbox.bbox) {
-      setCalloutPos(null);
+    if (!selectedBbox || selectedBbox.player_id !== -1 || selectedBbox.tracker_id === undefined) {
       setShowExistingInput(false);
       setExistingIdInput('');
       setCalloutError(null);
-      return;
     }
-    const [x1, y1, x2] = selectedBbox.bbox;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width / canvas.width;
-    const scaleY = rect.height / canvas.height;
+  }, [selectedBbox]);
 
-    const calloutLeft = Math.round(x2 * scaleX + 8); // 8px to the right of bbox
-    const calloutTop = Math.round(y1 * scaleY);
-    setCalloutPos({ left: calloutLeft, top: calloutTop });
-  }, [selectedBbox, canvasRef]);
+  /**
+   * Clear assignment UI state when frame changes
+   */
+  useEffect(() => {
+    setShowExistingInput(false);
+    setExistingIdInput('');
+    setCalloutError(null);
+    setCalloutBusy(false);
+  }, [currentFrameId]);
 
   /**
    * Create new player from selected unassigned tracker
@@ -472,17 +469,22 @@ export function FrameRenderer({
       const next = Array.from(new Set([...current, selectedBbox.tracker_id]));
       
       // Send ALL player data back with updated tracker_ids
+      const updatePayload = {
+        player_id: existingPlayer.player_id,
+        player_name: existingPlayer.player_name,
+        player_number: existingPlayer.player_number,
+        team_id: existingPlayer.team_id,
+        image_path: existingPlayer.image_path,
+        tracker_ids: next,
+      };
+      
+      console.log('🔵 PATCH payload being sent:', updatePayload);
+      console.log('🔵 tracker_ids in payload:', updatePayload.tracker_ids);
+      
       const patchResp = await fetch(`/api/player/${encodeURIComponent(String(targetId))}?sessionId=${encodeURIComponent(sessionId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player_id: existingPlayer.player_id,
-          player_name: existingPlayer.player_name,
-          player_number: existingPlayer.player_number,
-          team_id: existingPlayer.team_id,
-          image_path: existingPlayer.image_path,
-          tracker_ids: next,
-        }),
+        body: JSON.stringify(updatePayload),
       });
       if (!patchResp.ok) {
         const msg = await patchResp.text();
@@ -516,42 +518,6 @@ export function FrameRenderer({
           className="w-full h-auto block"
         />
 
-        {/* Assignment Callout for unassigned bbox */}
-        {calloutPos && selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined && (
-          <div
-            className="absolute z-10 rounded-md border bg-popover text-popover-foreground shadow-md p-3 w-64"
-            style={{ left: calloutPos.left, top: calloutPos.top }}
-          >
-            <div className="text-xs text-muted-foreground mb-2">Assign selected bbox (tracker {selectedBbox.tracker_id})</div>
-            <div className="flex items-center gap-2 mb-2">
-              <Button size="sm" variant="secondary" disabled={calloutBusy} onClick={handleCreateFromTracker} title="N">
-                New player (N)
-              </Button>
-              <Button size="sm" variant="secondary" disabled={calloutBusy} onClick={() => { setShowExistingInput(true); setTimeout(() => existingInputRef.current?.focus(), 0); }} title="E">
-                Existing (E)
-              </Button>
-            </div>
-            {showExistingInput && (
-              <div className="flex items-center gap-2">
-                <Input
-                  ref={existingInputRef}
-                  value={existingIdInput}
-                  onChange={(e) => setExistingIdInput(e.target.value)}
-                  placeholder="Enter player ID"
-                  className="h-8"
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAssignToExisting(); } }}
-                />
-                <Button size="sm" onClick={handleAssignToExisting} disabled={calloutBusy}>
-                  Assign
-                </Button>
-              </div>
-            )}
-            {calloutError && (
-              <div className="mt-2 text-xs text-destructive">{calloutError}</div>
-            )}
-          </div>
-        )}
-
         {/* Overlaid Navigation Buttons */}
         <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">
           <Button
@@ -575,6 +541,35 @@ export function FrameRenderer({
           </Button>
         </div>
 
+        {/* Semi-transparent Assignment Buttons at Bottom */}
+        {selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined && (
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 p-4 bg-black/60 backdrop-blur-sm pointer-events-none">
+            <div className="pointer-events-auto flex items-center gap-3">
+              <span className="text-white text-sm font-medium">
+                Assign tracker {selectedBbox.tracker_id}:
+              </span>
+              <Button 
+                size="sm" 
+                variant="secondary" 
+                disabled={calloutBusy} 
+                onClick={handleCreateFromTracker}
+                className="bg-white/90 hover:bg-white font-medium"
+              >
+                <span className="underline decoration-2 underline-offset-2">N</span>ew player
+              </Button>
+              <Button 
+                size="sm" 
+                variant="secondary" 
+                disabled={calloutBusy} 
+                onClick={() => { setShowExistingInput(true); setTimeout(() => existingInputRef.current?.focus(), 0); }}
+                className="bg-white/90 hover:bg-white font-medium"
+              >
+                <span className="underline decoration-2 underline-offset-2">E</span>xisting player
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Loading Overlay */}
         {isLoading && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -582,6 +577,52 @@ export function FrameRenderer({
           </div>
         )}
       </div>
+
+      {/* Input for Existing Player ID - Outside Frame */}
+      {showExistingInput && selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined && (
+        <div className="mt-4 p-4 rounded-lg border bg-card">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium">
+              Enter existing player ID to assign tracker {selectedBbox.tracker_id}:
+            </label>
+            <Input
+              ref={existingInputRef}
+              value={existingIdInput}
+              onChange={(e) => setExistingIdInput(e.target.value)}
+              placeholder="Player ID"
+              className="w-32"
+              onKeyDown={(e) => { 
+                if (e.key === 'Enter') { 
+                  e.preventDefault(); 
+                  handleAssignToExisting(); 
+                }
+                if (e.key === 'Escape') {
+                  setShowExistingInput(false);
+                  setExistingIdInput('');
+                  setCalloutError(null);
+                }
+              }}
+            />
+            <Button size="sm" onClick={handleAssignToExisting} disabled={calloutBusy}>
+              Assign
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => {
+                setShowExistingInput(false);
+                setExistingIdInput('');
+                setCalloutError(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          {calloutError && (
+            <div className="mt-2 text-sm text-destructive">{calloutError}</div>
+          )}
+        </div>
+      )}
 
       {/* Keyboard Hints */}
       <div className="mt-2 text-xs text-muted-foreground text-center">

@@ -250,6 +250,15 @@ export function PlayerCardModal({
     fetchImages();
   }, [trackerIdsKey, tenantId, videoId]);
 
+  // Show all images when modal opens
+  useEffect(() => {
+    if (open && images.length > 0) {
+      // Calculate total rows needed to show all images
+      const totalRows = Math.ceil(images.length / IMAGES_PER_ROW);
+      setVisibleRows(totalRows);
+    }
+  }, [open, images.length]);
+
   // Save player info (name, number, team, main image)
   const handleSave = async (opts?: { imagePath?: string }) => {
     if (!player) return;

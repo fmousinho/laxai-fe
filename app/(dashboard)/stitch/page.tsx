@@ -160,9 +160,7 @@ export default function StitchPage() {
                 onError={handleError}
                 onFrameLoaded={() => {
                   setPlayersRefreshTick((t) => t + 1);
-                  // Clear selection when frame changes
-                  setSelectedBbox(null);
-                  setSelectedTrackerId(null);
+                  // Do not clear selection; let FrameRenderer auto-emphasize unknown bbox
                 }}
                 selectedBbox={selectedBbox}
                 onSelectionChange={(sel) => {

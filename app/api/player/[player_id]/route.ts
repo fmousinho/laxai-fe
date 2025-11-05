@@ -112,6 +112,8 @@ export async function PATCH(
     console.log('Session ID:', sessionId);
     console.log('Player ID:', playerId);
     console.log('Update data:', body);
+    console.log('Update data stringified:', JSON.stringify(body));
+    console.log('tracker_ids in body:', body.tracker_ids);
 
     const response = await fetch(backendUrl, {
       method: 'PATCH',
