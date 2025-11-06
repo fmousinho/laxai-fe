@@ -69,12 +69,20 @@ export function FrameRenderer({
   // Incremented on any player change to invalidate all cached recipes/images
   const cacheVersionRef = useRef<number>(0);
 
+  // Tooltip state for hover
+  const [tooltip, setTooltip] = useState<{ tracker_id?: number; old_tracker_id?: number; x: number; y: number } | null>(null);
+
+  const handleHoverChange = useCallback((hover: { tracker_id?: number; old_tracker_id?: number; x: number; y: number } | null) => {
+    setTooltip(hover);
+  }, []);
+
   const { canvasRef, loadFrame } = useAnnotationCanvas({
     sessionId,
     currentFrameId,
     currentRecipe,
     onSelectionChange,
     selectedBbox,
+    onHoverChange: handleHoverChange,
   });
 
   // Assignment UI state
@@ -108,6 +116,7 @@ export function FrameRenderer({
           coords: [x1, y1, x2, y2],
           player_id: trackerId, // Keep label semantics: P-1 when unassigned
           tracker_id: effectiveTrackerId,
+          old_tracker_id: oldTrackerId,
           confidence: confidence,
           label_text: `P${trackerId}`,
           style_preset: 'default'
@@ -529,6 +538,19 @@ export function FrameRenderer({
           ref={canvasRef}
           className="w-full h-auto block"
         />
+
+        {/* Tooltip for hover */}
+        {tooltip && tooltip.old_tracker_id !== undefined && (
+          <div
+            className="fixed z-50 px-3 py-2 text-sm bg-black/90 text-white rounded-md shadow-lg pointer-events-none border border-white/20"
+            style={{
+              left: `${tooltip.x + 10}px`,
+              top: `${tooltip.y - 30}px`,
+            }}
+          >
+            Track ID: {tooltip.old_tracker_id}
+          </div>
+        )}
 
         {/* Overlaid Navigation Buttons */}
         <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none">

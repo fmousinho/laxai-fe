@@ -14,6 +14,7 @@ interface UseAnnotationCanvasProps {
   currentRecipe: Recipe | null;
   onSelectionChange?: (sel: { tracker_id?: number; player_id: number; bbox?: [number, number, number, number] } | null) => void;
   selectedBbox?: { player_id: number; tracker_id?: number; bbox?: [number, number, number, number] } | null;
+  onHoverChange?: (hover: { tracker_id?: number; old_tracker_id?: number; x: number; y: number } | null) => void;
 }
 
 export function useAnnotationCanvas({
@@ -22,15 +23,21 @@ export function useAnnotationCanvas({
   currentRecipe,
   onSelectionChange,
   selectedBbox,
+  onHoverChange,
 }: UseAnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageLoadedRef = useRef(false);
   const baseImageRef = useRef<ImageData | null>(null);
   const selectionCbRef = useRef(onSelectionChange);
+  const hoverCbRef = useRef(onHoverChange);
 
   useEffect(() => {
     selectionCbRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  useEffect(() => {
+    hoverCbRef.current = onHoverChange;
+  }, [onHoverChange]);
 
   /**
    * Dim a color by reducing opacity
@@ -330,6 +337,49 @@ export function useAnnotationCanvas({
     canvas.addEventListener('click', handleClick);
     return () => canvas.removeEventListener('click', handleClick);
   }, [currentRecipe, selectedBbox]);
+
+  // Handle hover to show tooltip
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hoverCbRef.current) return;
+
+    const handleMouseMove = (evt: MouseEvent) => {
+      if (!currentRecipe) {
+        hoverCbRef.current?.(null);
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (evt.clientX - rect.left) * scaleX;
+      const y = (evt.clientY - rect.top) * scaleY;
+
+      const res = findBboxAtPoint(currentRecipe.instructions as any, x, y);
+      
+      if (res && (res.tracker_id !== undefined || res.old_tracker_id !== undefined)) {
+        hoverCbRef.current?.({
+          tracker_id: res.tracker_id,
+          old_tracker_id: res.old_tracker_id,
+          x: evt.clientX,
+          y: evt.clientY,
+        });
+      } else {
+        hoverCbRef.current?.(null);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      hoverCbRef.current?.(null);
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [currentRecipe]);
 
   /**
    * Load image from blob and render on canvas

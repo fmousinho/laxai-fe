@@ -11,6 +11,7 @@ export interface AnnotationInstruction {
   coords: number[]; // [x1, y1, x2, y2] for bbox/line, [x, y] for point/label
   player_id: number;
   tracker_id?: number;
+  old_tracker_id?: number;
   label_text?: string;
   confidence?: number;
   style_preset?: StylePreset;

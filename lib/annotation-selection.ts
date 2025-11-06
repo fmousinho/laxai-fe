@@ -4,11 +4,13 @@ export interface AnnotationInstructionLite {
   coords: number[]; // [x1,y1,x2,y2] for bbox
   player_id: number;
   tracker_id?: number;
+  old_tracker_id?: number;
 }
 
 export interface HitTestResult {
   player_id: number;
   tracker_id?: number;
+  old_tracker_id?: number;
   bbox: [number, number, number, number];
 }
 
@@ -43,6 +45,7 @@ export function findBboxAtPoint(
   return {
     player_id: ins.player_id,
     tracker_id: ins.tracker_id,
+    old_tracker_id: ins.old_tracker_id,
     bbox: [x1, y1, x2, y2],
   };
 }
