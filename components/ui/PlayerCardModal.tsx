@@ -585,6 +585,9 @@ export function PlayerCardModal({
                 </DialogTitle>
               </div>
             </div>
+            <DialogDescription className="sr-only">
+              View and edit player information, manage player images and tracks
+            </DialogDescription>
         </DialogHeader>
 
           {isLoading ? (
@@ -604,9 +607,9 @@ export function PlayerCardModal({
                 <CardContent className="py-4 px-6 flex items-center gap-6">
                   {/* Main image or placeholder */}
                   <div className="w-28 h-40 bg-muted rounded-md flex items-center justify-center overflow-hidden border border-muted-foreground/20">
-                    {mainImagePath ? (
+                    {mainImagePath && images.find(img => img.fullPath === mainImagePath)?.signedUrl ? (
                       <img
-                        src={images.find(img => img.fullPath === mainImagePath)?.signedUrl || mainImagePath}
+                        src={images.find(img => img.fullPath === mainImagePath)!.signedUrl}
                         alt="Main"
                         className="w-full h-full object-contain"
                         draggable={false}

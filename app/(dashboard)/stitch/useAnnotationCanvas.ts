@@ -45,12 +45,11 @@ export function useAnnotationCanvas({
   /**
    * Convert any color to RGBA with specified alpha
    */
-  const colorToRgba = useCallback((color: string, alpha: number): string => {
-    // Create a temporary canvas to convert any color format to rgba
+    const colorWithAlpha = useCallback((color: string, alpha: number): string => {
     const canvas = document.createElement('canvas');
     canvas.width = 1;
     canvas.height = 1;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return `rgba(128, 128, 128, ${alpha})`; // fallback gray
     
     ctx.fillStyle = color;
@@ -136,19 +135,19 @@ export function useAnnotationCanvas({
 
       // For unidentified players (player_id === -1), fill with transparent color
       if (instruction.player_id === -1) {
-        ctx.fillStyle = colorToRgba(style.bbox_color, 0.3); // 30% opacity
+        ctx.fillStyle = colorWithAlpha(style.bbox_color, 0.3); // 30% opacity
         ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
       }
 
       // If selected, add a glowing effect with multiple strokes
       if (selected) {
         // Outer glow
-        ctx.strokeStyle = colorToRgba(style.bbox_color, 0.3);
+        ctx.strokeStyle = colorWithAlpha(style.bbox_color, 0.3);
         ctx.lineWidth = style.bbox_thickness + 8;
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
         
         // Middle glow
-        ctx.strokeStyle = colorToRgba(style.bbox_color, 0.5);
+        ctx.strokeStyle = colorWithAlpha(style.bbox_color, 0.5);
         ctx.lineWidth = style.bbox_thickness + 4;
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
       }
@@ -191,7 +190,7 @@ export function useAnnotationCanvas({
         ctx.textBaseline = 'alphabetic'; // Reset to default
       }
     },
-    [getStyle, colorToRgba, isSelected]
+    [getStyle, colorWithAlpha, isSelected]
   );
 
   /**
@@ -263,7 +262,7 @@ export function useAnnotationCanvas({
   const renderAnnotations = useCallback(() => {
     if (!canvasRef.current || !currentRecipe) return;
 
-    const ctx = canvasRef.current.getContext('2d');
+    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     // Restore base image without annotations
@@ -339,7 +338,7 @@ export function useAnnotationCanvas({
     async (imageBlob: Blob, recipe?: Recipe) => {
       if (!canvasRef.current) return;
 
-      const ctx = canvasRef.current.getContext('2d');
+      const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
 
       // Mark image as not loaded
@@ -369,7 +368,7 @@ export function useAnnotationCanvas({
           // Render annotations using provided recipe or current recipe
           const recipeToRender = recipe || currentRecipe;
           if (recipeToRender && canvasRef.current) {
-            const renderCtx = canvasRef.current.getContext('2d');
+            const renderCtx = canvasRef.current.getContext('2d', { willReadFrequently: true });
             if (renderCtx) {
               recipeToRender.instructions.forEach((instruction) => {
                 switch (instruction.type) {
