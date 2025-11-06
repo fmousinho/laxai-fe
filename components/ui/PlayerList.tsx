@@ -139,10 +139,19 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
   }, [isModalOpen, onModalOpenChange]);
 
   // When the modal saves changes, update the local list immediately
-  const handlePlayerUpdated = (updated: Player) => {
-    setPlayers((prev) =>
-      prev.map((p) => (p.player_id === updated.player_id ? { ...p, ...updated } : p))
-    );
+  // Also handles player deletion by refetching the list
+  const handlePlayerUpdated = async (updated: Player) => {
+    // Simply refetch the entire list to ensure consistency
+    // This handles both updates and deletions
+    try {
+      const response = await fetch(`/api/players?sessionId=${encodeURIComponent(sessionId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPlayers(data.players || []);
+      }
+    } catch (err) {
+      console.error('Error refreshing players:', err);
+    }
   };
 
   useEffect(() => {

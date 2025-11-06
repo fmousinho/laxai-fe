@@ -388,6 +388,39 @@ export function PlayerCardModal({
     }
   };
 
+  // Delete player
+  const handleDeletePlayer = async () => {
+    if (!player) return;
+    if (!confirm(`Are you sure you want to delete player ${player.player_id}${player.player_name ? ` (${player.player_name})` : ''}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete player');
+      }
+
+      // Close the modal and notify parent
+      onOpenChange(false);
+      onPlayerUpdated?.(player); // Notify parent to refresh the list
+    } catch (err) {
+      console.error('Error deleting player:', err);
+      setError('Failed to delete player');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleRemoveImage = async (image: PlayerImage) => {
     if (!confirm('Are you sure you want to remove this image?')) {
       return;
@@ -662,7 +695,18 @@ export function PlayerCardModal({
           ) : player ? (
             <div className="flex flex-col gap-4 overflow-hidden">
               {/* Redesigned Top Card: Main image + info in a single card */}
-              <Card className="mb-2">
+              <Card className="mb-2 relative">
+                {/* Delete button in top right */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDeletePlayer}
+                  disabled={isSaving}
+                  className="absolute top-2 right-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  title="Delete player"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
                 <CardContent className="py-4 px-6 flex items-center gap-6">
                   {/* Main image or placeholder */}
                   <div className="w-28 h-40 bg-muted rounded-md flex items-center justify-center overflow-hidden border border-muted-foreground/20">
