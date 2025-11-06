@@ -329,6 +329,54 @@ export function PlayerCardModal({
     }
   };
 
+  // Remove track from player
+  const handleRemoveTrack = async (trackId: number) => {
+    if (!player) return;
+    if (!confirm(`Remove track ${trackId} from this player?`)) return;
+    
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      // Remove trackId from tracker_ids array
+      const updatedTrackerIds = player.tracker_ids.filter(tid => tid !== trackId);
+      
+      const response = await fetch(
+        `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            player_id: playerId,
+            player_name: player.player_name,
+            player_number: player.player_number,
+            team_id: player.team_id,
+            image_path: player.image_path,
+            tracker_ids: updatedTrackerIds,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to remove track from player');
+      }
+
+      const updatedPlayer: Player = await response.json();
+      setPlayer(updatedPlayer);
+      
+      // Clear selection and refresh images
+      setSelectedPaths(new Set());
+      
+      // Notify parent to refresh (frame renderer and player list)
+      onPlayerUpdated?.(updatedPlayer);
+    } catch (err) {
+      console.error('Error removing track:', err);
+      setError('Failed to remove track from player');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleRemoveImage = async (image: PlayerImage) => {
     if (!confirm('Are you sure you want to remove this image?')) {
       return;
@@ -621,7 +669,7 @@ export function PlayerCardModal({
                     )}
                   </div>
                   {/* Info section - Inline editable */}
-                  <div className="flex-1 flex flex-col justify-center min-w-0 space-y-2">
+                  <div className="flex-1 flex flex-col justify-center min-w-0 space-y-3">
                     {/* Player Name - Press Enter to save */}
                     <div className="flex items-center gap-2">
                       <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -637,50 +685,83 @@ export function PlayerCardModal({
                             }
                           }
                         }}
-                        className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 flex-1"
+                        className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 w-64"
                       />
                     </div>
                     
-                    {/* Number - Press Enter to save */}
-                    <div className="flex items-center gap-2">
-                      <Hash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm text-muted-foreground w-12">Number:</span>
-                      <Input
-                        type="number"
-                        placeholder="—"
-                        value={editNumber}
-                        onChange={(e) => setEditNumber(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (editNumber !== (player.player_number?.toString() || '')) {
-                              handleSave();
+                    {/* Number and Team in one row */}
+                    <div className="flex items-center gap-6">
+                      {/* Number - Press Enter to save */}
+                      <div className="flex items-center gap-2">
+                        <Hash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm text-muted-foreground">Number:</span>
+                        <Input
+                          type="number"
+                          placeholder="—"
+                          value={editNumber}
+                          onChange={(e) => setEditNumber(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (editNumber !== (player.player_number?.toString() || '')) {
+                                handleSave();
+                              }
                             }
-                          }
-                        }}
-                        className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
-                      />
+                          }}
+                          className="w-16 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
+                        />
+                      </div>
+                      
+                      {/* Team ID - Press Enter to save */}
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm text-muted-foreground">Team:</span>
+                        <Input
+                          type="number"
+                          placeholder="—"
+                          value={editTeamId}
+                          onChange={(e) => setEditTeamId(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (editTeamId !== (player.team_id?.toString() || '')) {
+                                handleSave();
+                              }
+                            }
+                          }}
+                          className="w-16 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
+                        />
+                      </div>
                     </div>
                     
-                    {/* Team ID - Press Enter to save */}
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm text-muted-foreground w-12">Team:</span>
-                      <Input
-                        type="number"
-                        placeholder="—"
-                        value={editTeamId}
-                        onChange={(e) => setEditTeamId(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (editTeamId !== (player.team_id?.toString() || '')) {
-                              handleSave();
-                            }
-                          }
-                        }}
-                        className="flex-1 border-transparent hover:border-input focus:border-input bg-transparent px-2 h-8 font-medium"
-                      />
+                    {/* Track IDs in a nested card */}
+                    <div className="bg-muted/50 rounded-md p-3 border border-muted-foreground/20">
+                      <div className="text-sm text-muted-foreground mb-2">Track IDs:</div>
+                      <div className="grid grid-cols-10 gap-1">
+                        {player.tracker_ids && player.tracker_ids.length > 0 ? (
+                          player.tracker_ids.map((trackId) => (
+                            <Badge
+                              key={trackId}
+                              variant="secondary"
+                              className="flex items-center justify-between gap-0.5 px-1 py-0.5 h-6"
+                            >
+                              <span className="font-medium text-xs tabular-nums text-center flex-1">{trackId}</span>
+                              <button
+                                onClick={() => handleRemoveTrack(trackId)}
+                                disabled={bulkRemoving || removingImages.size > 0}
+                                className="hover:text-destructive transition-colors disabled:opacity-50 flex-shrink-0"
+                                title={`Remove track ${trackId}`}
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic col-span-10">
+                            No tracks assigned
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     {/* Save button for manual save */}
@@ -808,52 +889,7 @@ export function PlayerCardModal({
                             <Button 
                               variant="secondary" 
                               size="sm" 
-                              onClick={async () => {
-                                if (!player) return;
-                                if (!confirm(`Remove track ${trackId} from this player?`)) return;
-                                
-                                setIsSaving(true);
-                                setError(null);
-                                
-                                try {
-                                  // Remove trackId from tracker_ids array
-                                  const updatedTrackerIds = player.tracker_ids.filter(tid => tid !== trackId);
-                                  
-                                  const response = await fetch(
-                                    `/api/player/${playerId}?sessionId=${encodeURIComponent(sessionId)}`,
-                                    {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        player_id: playerId,
-                                        player_name: player.player_name,
-                                        player_number: player.player_number,
-                                        team_id: player.team_id,
-                                        image_path: player.image_path,
-                                        tracker_ids: updatedTrackerIds,
-                                      }),
-                                    }
-                                  );
-
-                                  if (!response.ok) {
-                                    throw new Error('Failed to remove track from player');
-                                  }
-
-                                  const updatedPlayer: Player = await response.json();
-                                  setPlayer(updatedPlayer);
-                                  
-                                  // Clear selection and refresh images
-                                  setSelectedPaths(new Set());
-                                  
-                                  // Notify parent to refresh (frame renderer and player list)
-                                  onPlayerUpdated?.(updatedPlayer);
-                                } catch (err) {
-                                  console.error('Error removing track:', err);
-                                  setError('Failed to remove track from player');
-                                } finally {
-                                  setIsSaving(false);
-                                }
-                              }}
+                              onClick={() => handleRemoveTrack(trackId)}
                               disabled={isSaving}
                             >
                               Remove Track
