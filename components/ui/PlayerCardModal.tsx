@@ -90,6 +90,7 @@ export function PlayerCardModal({
 
   // Edit state
   const [editName, setEditName] = useState('');
+  const lastPlayerIdRef = useRef<number | null>(null);
   const [editNumber, setEditNumber] = useState('');
   const [editTeamId, setEditTeamId] = useState('');
 
@@ -132,10 +133,13 @@ export function PlayerCardModal({
     // Use mock data if provided (for testing)
     if (mockPlayer) {
         setPlayer(mockPlayer);
-        setEditName(mockPlayer.player_name || '');
-        setEditNumber(mockPlayer.player_number?.toString() || '');
-        setEditTeamId(mockPlayer.team_id?.toString() || '');
-        setMainImagePath(mockPlayer.image_path || null);
+        if (lastPlayerIdRef.current !== mockPlayer.player_id) {
+          setEditName(mockPlayer.player_name || '');
+          setEditNumber(mockPlayer.player_number?.toString() || '');
+          setEditTeamId(mockPlayer.team_id?.toString() || '');
+          setMainImagePath(mockPlayer.image_path || null);
+        }
+        lastPlayerIdRef.current = mockPlayer.player_id;
         return;
     }
 
@@ -153,10 +157,13 @@ export function PlayerCardModal({
 
       const data: Player = await response.json();
         setPlayer(data);
-        setEditName(data.player_name || '');
-        setEditNumber(data.player_number?.toString() || '');
-        setEditTeamId(data.team_id?.toString() || '');
-        setMainImagePath(data.image_path || null);
+        if (lastPlayerIdRef.current !== data.player_id) {
+          setEditName(data.player_name || '');
+          setEditNumber(data.player_number?.toString() || '');
+          setEditTeamId(data.team_id?.toString() || '');
+          setMainImagePath(data.image_path || null);
+        }
+        lastPlayerIdRef.current = data.player_id;
     } catch (err) {
       console.error('Error fetching player:', err);
       setError('Failed to load player data');
@@ -291,7 +298,11 @@ export function PlayerCardModal({
       setPlayer(updatedPlayer);
       setMainImagePath(updatedPlayer.image_path || null);
       // Sync edit fields with server response to reflect canonical values
-      setEditName(updatedPlayer.player_name || '');
+      // Only update editName if the playerId changed (not on every save)
+      if (lastPlayerIdRef.current !== updatedPlayer.player_id) {
+        setEditName(updatedPlayer.player_name || '');
+        lastPlayerIdRef.current = updatedPlayer.player_id;
+      }
       setEditNumber(
         typeof updatedPlayer.player_number === 'number'
           ? String(updatedPlayer.player_number)
@@ -685,7 +696,7 @@ export function PlayerCardModal({
                             }
                           }
                         }}
-                        className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 w-64"
+                        className="text-xl font-bold border-transparent hover:border-input focus:border-input bg-transparent px-2 h-10 flex-1 min-w-[14rem] max-w-[40rem] overflow-x-auto"
                       />
                     </div>
                     

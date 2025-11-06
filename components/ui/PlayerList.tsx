@@ -22,6 +22,10 @@ interface PlayerListProps {
    * Called after a player is successfully created from an unassigned tracker
    */
   onPlayerCreated?: (player: Player) => void;
+  /**
+   * Called when the modal open state changes
+   */
+  onModalOpenChange?: (isOpen: boolean) => void;
 }
 
 function PlayerItemSkeleton() {
@@ -121,13 +125,18 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
   );
 }
 
-export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId, onPlayerCreated }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId, onPlayerCreated, onModalOpenChange }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Notify parent when modal state changes
+  useEffect(() => {
+    onModalOpenChange?.(isModalOpen);
+  }, [isModalOpen, onModalOpenChange]);
 
   // When the modal saves changes, update the local list immediately
   const handlePlayerUpdated = (updated: Player) => {

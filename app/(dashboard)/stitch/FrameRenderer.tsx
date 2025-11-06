@@ -34,6 +34,10 @@ interface FrameRendererProps {
    * Parent can use this to refresh frame and player list.
    */
   onAssignmentDone?: () => void;
+  /**
+   * Whether a modal is currently open. Disables keyboard shortcuts when true.
+   */
+  isModalOpen?: boolean;
 }
 
 interface CachedFrame {
@@ -57,6 +61,7 @@ export function FrameRenderer({
   onSelectionChange,
   selectedBbox,
   onAssignmentDone,
+  isModalOpen = false,
 }: FrameRendererProps) {
   const [currentFrameId, setCurrentFrameId] = useState<number>(0);
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
@@ -348,6 +353,9 @@ export function FrameRenderer({
    */
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle shortcuts when a modal is open
+      if (isModalOpen) return;
+
       // Callout actions take precedence when visible
       const isCalloutActive = !!(selectedBbox && selectedBbox.player_id === -1 && selectedBbox.tracker_id !== undefined);
 
@@ -375,7 +383,7 @@ export function FrameRenderer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrevious]);
+  }, [handleNext, handlePrevious, isModalOpen]);
 
   /**
    * Load initial frame on mount

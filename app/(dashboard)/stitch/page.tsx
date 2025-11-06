@@ -20,6 +20,7 @@ export default function StitchPage() {
   const [frameWidth, setFrameWidth] = useState<number>(100); // percentage
   const resizeRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleSelectVideo = async (video: VideoFile) => {
     setIsLoading(true);
@@ -158,6 +159,7 @@ export default function StitchPage() {
                 totalFrames={sessionData.total_frames}
                 refreshTrigger={frameRefreshTrigger}
                 onError={handleError}
+                isModalOpen={isModalOpen}
                 onFrameLoaded={() => {
                   // Only reload PlayerList on actual player changes (handled in onAssignmentDone/onPlayerCreated)
                   // No action needed here on frame load.
@@ -203,6 +205,7 @@ export default function StitchPage() {
               refreshKey={playersRefreshTick}
               selectedUnassignedTrackerId={selectedTrackerId}
               onPlayerCreated={handlePlayerCreated}
+              onModalOpenChange={setIsModalOpen}
             />
           </div>
         </div>
