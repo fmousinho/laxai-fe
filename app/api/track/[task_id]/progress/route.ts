@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantId } from '@/lib/gcs-tenant';
-import { JWT } from 'google-auth-library';
-import * as fs from 'fs';
+import { getBackendIdToken } from '@/lib/auth';
 
 const BACKEND_URL = process.env.BACKEND_API_URL;
 
@@ -27,40 +26,34 @@ export async function GET(
 
     const { task_id } = await params;
 
-    // Authenticate with Google Cloud using JWT constructor to avoid deprecated methods
-    let client;
-    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      try {
-        // Load credentials and create JWT client directly
-        const keys = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
-        client = new JWT({
-          email: keys.client_email,
-          key: keys.private_key,
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-        });
-      } catch (error) {
-        console.error('Failed to create JWT client from service account key:', error);
-        return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
-      }
-    } else {
-      // Fallback - this might not work without credentials
-      console.error('GOOGLE_APPLICATION_CREDENTIALS not set');
-      return NextResponse.json({ error: 'Authentication configuration missing' }, { status: 500 });
-    }
+    // Get ID token for backend authentication (Cloud Run/IAP)
+    const idToken = await getBackendIdToken(BACKEND_URL);
 
     // Debug: Log the URL we're trying to call
-    const apiUrl = `${BACKEND_URL}/api/v1/track/${task_id}/progress`;
+    const apiUrl = `${BACKEND_URL}/api/v1/tracking/${task_id}/progress`;
     console.log(`Calling backend API: ${apiUrl}`);
 
     // Make request to backend polling API
-    const response = await client.request({
-      url: apiUrl,
+    const response = await fetch(apiUrl, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+      },
     });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Backend progress error:', errorText);
+      if (response.status === 404) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+      }
+      return NextResponse.json({ error: 'Failed to get progress' }, { status: response.status });
+    }
+
+    const data = await response.json();
     console.log(`Backend response status: ${response.status}`);
-    console.log(`Backend response data:`, response.data);
-    return NextResponse.json(response.data);
+    console.log(`Backend response data:`, data);
+    return NextResponse.json(data);
 
 
   } catch (error: any) {
