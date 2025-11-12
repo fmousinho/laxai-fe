@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getPlayerColor } from '@/lib/player-colors';
 import { PlayerCardModal } from '@/components/ui/PlayerCardModal';
@@ -22,6 +22,10 @@ interface PlayerListProps {
    * Called after a player is successfully created from an unassigned tracker
    */
   onPlayerCreated?: (player: Player) => void;
+  /**
+   * Called after a player is updated or deleted (to trigger cache refresh)
+   */
+  onPlayerUpdated?: () => void;
   /**
    * Called when the modal open state changes
    */
@@ -125,7 +129,7 @@ function PlayerItem({ player, onClick }: PlayerItemProps) {
   );
 }
 
-export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId, onPlayerCreated, onModalOpenChange }: PlayerListProps) {
+export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedTrackerId, onPlayerCreated, onPlayerUpdated, onModalOpenChange }: PlayerListProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +144,7 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
 
   // When the modal saves changes, update the local list immediately
   // Also handles player deletion by refetching the list
-  const handlePlayerUpdated = async (updated: Player) => {
+  const handlePlayerUpdated = useCallback(async (updated: Player) => {
     // Simply refetch the entire list to ensure consistency
     // This handles both updates and deletions
     try {
@@ -148,33 +152,40 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
       if (response.ok) {
         const data = await response.json();
         setPlayers(data.players || []);
+        
+        // Notify parent to trigger frame cache refresh
+        onPlayerUpdated?.();
       }
     } catch (err) {
       console.error('Error refreshing players:', err);
     }
-  };
+  }, [sessionId, onPlayerUpdated]);
 
   useEffect(() => {
     const fetchPlayers = async () => {
       if (!sessionId) {
+        console.log('⚠️ PlayerList: No sessionId provided');
         setIsLoading(false);
         return;
       }
 
+      console.log('🔄 PlayerList: Fetching players for sessionId:', sessionId);
       setIsLoading(true);
       setError(null);
 
       try {
         const response = await fetch(`/api/players?sessionId=${encodeURIComponent(sessionId)}`);
+        console.log('📡 PlayerList: Response status:', response.status);
 
         if (!response.ok) {
           throw new Error('Failed to fetch players');
         }
 
         const data = await response.json();
+        console.log('✅ PlayerList: Received data:', data);
         setPlayers(data.players || []);
       } catch (err) {
-        console.error('Error fetching players:', err);
+        console.error('❌ PlayerList: Error fetching players:', err);
         setError('Failed to load players');
       } finally {
         setIsLoading(false);
@@ -185,10 +196,8 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
   }, [sessionId, refreshKey]);
 
   const handlePlayerClick = (playerId: number) => {
-    console.log('🔵 Player clicked:', { playerId, videoId, sessionId });
     setSelectedPlayerId(playerId);
     setIsModalOpen(true);
-    console.log('🟢 Modal state set:', { selectedPlayerId: playerId, isModalOpen: true });
   };
 
   const assignedTrackerIds = new Set<number>(
@@ -296,26 +305,16 @@ export function PlayerList({ sessionId, videoId, refreshKey, selectedUnassignedT
       </div>
 
       {/* Player Card Modal */}
-      {(() => {
-        const shouldRender = selectedPlayerId !== null && videoId;
-        console.log('🟣 Modal render check:', { 
-          selectedPlayerId, 
-          videoId, 
-          sessionId, 
-          isModalOpen, 
-          shouldRender 
-        });
-        return shouldRender ? (
-          <PlayerCardModal
-            open={isModalOpen}
-            onOpenChange={setIsModalOpen}
-            playerId={selectedPlayerId}
-            videoId={videoId}
-            sessionId={sessionId}
-            onPlayerUpdated={handlePlayerUpdated}
-          />
-        ) : null;
-      })()}
+      {selectedPlayerId !== null && videoId ? (
+        <PlayerCardModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          playerId={selectedPlayerId}
+          videoId={videoId}
+          sessionId={sessionId}
+          onPlayerUpdated={handlePlayerUpdated}
+        />
+      ) : null}
     </div>
   );
 }

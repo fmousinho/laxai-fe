@@ -77,6 +77,11 @@ export default function StitchPage() {
     setSelectedTrackerId(null);
   };
 
+  const handlePlayerUpdated = () => {
+    // Trigger frame refresh to invalidate cache and reload with updated player data
+    setFrameRefreshTrigger((t) => t + 1);
+  };
+
   // Resizing logic
   const handleMouseDown = useCallback(() => {
     setIsResizing(true);
@@ -205,6 +210,7 @@ export default function StitchPage() {
               refreshKey={playersRefreshTick}
               selectedUnassignedTrackerId={selectedTrackerId}
               onPlayerCreated={handlePlayerCreated}
+              onPlayerUpdated={handlePlayerUpdated}
               onModalOpenChange={setIsModalOpen}
             />
           </div>

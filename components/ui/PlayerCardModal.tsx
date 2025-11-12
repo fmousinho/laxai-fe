@@ -321,6 +321,9 @@ export function PlayerCardModal({
           console.warn('onPlayerUpdated callback threw:', cbErr);
         }
       }
+      
+      // Close the modal after successful save
+      onOpenChange(false);
     } catch (err) {
       console.error('Error updating player:', err);
       setError('Failed to save changes');
@@ -794,7 +797,7 @@ export function PlayerCardModal({
                       <div className="text-sm text-muted-foreground mb-2">Track IDs:</div>
                       <div className="grid grid-cols-10 gap-1">
                         {player.tracker_ids && player.tracker_ids.length > 0 ? (
-                          player.tracker_ids.map((trackId) => (
+                          [...player.tracker_ids].sort((a, b) => a - b).map((trackId) => (
                             <Badge
                               key={trackId}
                               variant="secondary"
